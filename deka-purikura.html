@@ -58,8 +58,6 @@
   #printArea { display:none; }
   .page { position:relative; width:210mm; height:297mm; overflow:hidden; page-break-after:always; break-after:page; }
   .page:last-child { page-break-after:auto; break-after:auto; }
-  .tileBox { position:absolute; overflow:hidden; }
-  .tileBox img { position:absolute; left:0; }
   .tileLabel { position:absolute; bottom:2mm; right:4mm; font:8pt sans-serif; color:#999; }
   @media print {
     body { background:#fff; }
@@ -414,7 +412,7 @@
     if (p.tile) {
       html = page(strip('top'), '1枚目（上）', 'cut') + page(strip('bottom'), '2枚目（下）');
     } else {
-      html = Array.from({ length: p.n }, (_, k) => page(strip('full'), p.n > 1 ? `${k + 1}本目` : '1本')).join('');
+      html = page(strip('full'), '1本');
     }
     html += `<div class="llabel" style="width:100%">${state.copies}人分（${state.copies}部）印刷します</div>`;
     $('layout').innerHTML = html;
@@ -441,46 +439,38 @@
 
   $('btnPrint').addEventListener('click', () => {
     const p = PAPERS[state.paper];
-    const margin = 6;
-    const src = $('work').toDataURL('image/jpeg', 0.95);
+    const margin = 0;
+    const contentH = p.h - margin * 2;
+    const src = $('work');
     const area = $('printArea');
     area.innerHTML = '';
     $('pageStyle').textContent = `@page { size: ${p.size} portrait; margin: 0; }`;
+    const makePage = (sx, sy, sw, sh, wmm, hmm, label) => {
+      const c = document.createElement('canvas');
+      c.width = sw; c.height = sh;
+      c.getContext('2d').drawImage(src, sx, sy, sw, sh, 0, 0, sw, sh);
+      const page = document.createElement('div'); page.className = 'page';
+      const img = new Image();
+      img.src = c.toDataURL('image/jpeg', 0.95);
+      img.style.cssText = `position:absolute;left:${(p.w - wmm) / 2}mm;top:${margin}mm;width:${wmm}mm;height:${hmm}mm`;
+      page.appendChild(img);
+      if (label) {
+        const lbl = document.createElement('div'); lbl.className = 'tileLabel'; lbl.textContent = label;
+        page.appendChild(lbl);
+      }
+      return page;
+    };
     const pages = [];
     for (let c = 0; c < state.copies; c++) {
+      const who = state.copies > 1 ? `・${c + 1}人目` : '';
       if (p.tile) {
-        const half = p.h - margin * 2;
-        let stripH = half * 2, stripW = stripH * W / H;
-        if (stripW > p.w - margin * 2) { stripW = p.w - margin * 2; stripH = stripW * H / W; }
-        const boxH = stripH / 2;
-        for (let i = 0; i < 2; i++) {
-          const page = document.createElement('div'); page.className = 'page';
-          const box = document.createElement('div'); box.className = 'tileBox';
-          box.style.left = ((p.w - stripW) / 2) + 'mm'; box.style.top = margin + 'mm';
-          box.style.width = stripW + 'mm'; box.style.height = boxH + 'mm';
-          const img = new Image(); img.src = src;
-          img.style.width = stripW + 'mm'; img.style.height = stripH + 'mm';
-          img.style.top = (i === 0 ? 0 : -boxH) + 'mm';
-          box.appendChild(img); page.appendChild(box);
-          const lbl = document.createElement('div'); lbl.className = 'tileLabel';
-          lbl.textContent = (i === 0 ? '1枚目（上）' : '2枚目（下）') + (state.copies > 1 ? `・${c + 1}人目` : '');
-          page.appendChild(lbl);
-          pages.push(page);
-        }
+        const half = H / 2;
+        const wmm = contentH * W / half;
+        pages.push(makePage(0, 0, W, half, wmm, contentH, `1枚目（上）${who}`));
+        pages.push(makePage(0, half, W, half, wmm, contentH, `2枚目（下）${who}`));
       } else {
-        const page = document.createElement('div'); page.className = 'page';
-        Object.assign(page.style, { display:'flex', justifyContent:'center', alignItems:'center', gap:'6mm' });
-        let stripH = p.h - margin * 2;
-        let stripW = stripH * W / H;
-        const maxW = (p.w - margin * 2 - (p.n - 1) * 6) / p.n;
-        if (stripW > maxW) { stripW = maxW; stripH = stripW * H / W; }
-        for (let i = 0; i < p.n; i++) {
-          const img = new Image(); img.src = src;
-          img.style.width = stripW + 'mm'; img.style.height = stripH + 'mm';
-          if (state.color === 'white') img.style.outline = '0.2mm dashed #ccc';
-          page.appendChild(img);
-        }
-        pages.push(page);
+        const wmm = contentH * W / H;
+        pages.push(makePage(0, 0, W, H, wmm, contentH, who ? `1本${who}` : ''));
       }
     }
     pages.forEach(pg => area.appendChild(pg));
