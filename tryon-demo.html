@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>疑似試着デモ</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#111;color:#fff;font-family:-apple-system,"Hiragino Sans",sans-serif;height:100vh;height:100dvh;display:flex;flex-direction:column}
+header{padding:8px 12px;font-size:14px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+#stage{flex:1;position:relative;min-height:0;overflow:hidden}
+canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+#status{position:absolute;left:8px;top:8px;background:rgba(0,0,0,.55);padding:4px 8px;border-radius:6px;font-size:12px}
+footer{padding:8px;display:flex;gap:8px;align-items:center;overflow-x:auto}
+.item{width:64px;height:64px;flex:0 0 auto;border-radius:8px;border:2px solid transparent;background:#222;padding:2px}
+.item.on{border-color:#ff3d7f}
+button,.filebtn{background:#ff3d7f;color:#fff;border:0;border-radius:8px;padding:10px 12px;font-size:14px;flex:0 0 auto;cursor:pointer}
+.filebtn input{display:none}
+.filebtn{display:inline-block}
+input[type=range]{width:100px;flex:0 0 auto}
+</style>
+</head>
+<body>
+<header>
+  <span>疑似試着デモ</span>
+  <span style="font-size:12px;opacity:.7">服をタップ→画面をドラッグで位置調整</span>
+</header>
+<div id="stage">
+  <canvas id="cv"></canvas>
+  <div id="status">準備中</div>
+</div>
+<footer>
+  <button id="startBtn">カメラ開始</button>
+  <div id="thumbs" style="display:flex;gap:8px"></div>
+  <label class="filebtn">PNG追加<input id="file" type="file" accept="image/png,image/*"></label>
+  <span style="font-size:12px">サイズ</span>
+  <input id="size" type="range" min="50" max="200" value="100">
+  <button id="shotBtn">保存</button>
+</footer>
+<video id="v" playsinline muted autoplay style="display:none"></video>
+
+<script type="module">
+const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
+const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
+const LIB_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm';
+
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const stage = document.getElementById('stage');
+const video = document.getElementById('v');
+const statusEl = document.getElementById('status');
+const sizeEl = document.getElementById('size');
+
+let landmarker = null;
+let lastVideoTime = -1;
+let pose = null;
+let geo = { dx: 0, dy: 0, dw: 1, dh: 1 };
+let garment = null;
+let offset = { x: 0, y: 0 };
+let smooth = null;
+let drag = null;
+
+// 服の基準：肩の左右端が (60,120)(540,120)、肩中央 (300,120)
+const SHOULDER_W = 480;
+const ANCHOR = { x: 300, y: 120 };
+
+function makeShirt(color) {
+  const c = document.createElement('canvas');
+  c.width = 600; c.height = 700;
+  const g = c.getContext('2d');
+  g.fillStyle = color;
+  g.beginPath();
+  g.moveTo(170, 40); g.lineTo(60, 120); g.lineTo(0, 260); g.lineTo(110, 300);
+  g.lineTo(110, 680); g.lineTo(490, 680); g.lineTo(490, 300); g.lineTo(600, 260);
+  g.lineTo(540, 120); g.lineTo(430, 40); g.lineTo(370, 90);
+  g.quadraticCurveTo(300, 130, 230, 90); g.closePath(); g.fill();
+  g.fillStyle = 'rgba(255,255,255,.85)';
+  g.font = 'bold 60px sans-serif'; g.textAlign = 'center';
+  g.fillText('JUN', 300, 420);
+  return c;
+}
+
+const presets = [
+  { name: '黒', img: makeShirt('#1c1c1c') },
+  { name: '白', img: makeShirt('#f2f2f2') },
+  { name: '赤', img: makeShirt('#d6336c') },
+];
+
+function setGarment(img, btn) {
+  garment = img;
+  document.querySelectorAll('.item').forEach(b => b.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+}
+
+const thumbs = document.getElementById('thumbs');
+presets.forEach((p, i) => {
+  const b = document.createElement('button');
+  b.className = 'item';
+  const t = document.createElement('canvas');
+  t.width = 60; t.height = 60;
+  t.getContext('2d').drawImage(p.img, 0, 0, 60, 60);
+  t.style.width = '100%'; t.style.height = '100%';
+  b.appendChild(t);
+  b.onclick = () => setGarment(p.img, b);
+  thumbs.appendChild(b);
+  if (i === 0) setGarment(p.img, b);
+});
+
+// アップロードしたPNGを 600x700 に収める（肩の位置はおおよそ上から17%）
+document.getElementById('file').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const bmp = await createImageBitmap(f);
+  const c = document.createElement('canvas');
+  c.width = 600; c.height = 700;
+  const k = Math.min(600 / bmp.width, 700 / bmp.height);
+  const w = bmp.width * k, h = bmp.height * k;
+  c.getContext('2d').drawImage(bmp, (600 - w) / 2, 0, w, h);
+  const b = document.createElement('button');
+  b.className = 'item';
+  const t = document.createElement('canvas');
+  t.width = 60; t.height = 60;
+  t.getContext('2d').drawImage(c, 0, 0, 60, 60);
+  t.style.width = '100%'; t.style.height = '100%';
+  b.appendChild(t);
+  b.onclick = () => setGarment(c, b);
+  thumbs.appendChild(b);
+  setGarment(c, b);
+});
+
+function fit() {
+  const r = stage.getBoundingClientRect();
+  const w = Math.round(r.width), h = Math.round(r.height);
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+}
+
+function drawVideo() {
+  const W = cv.width, H = cv.height;
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const k = Math.max(W / vw, H / vh);
+  geo = { dw: vw * k, dh: vh * k, dx: (W - vw * k) / 2, dy: (H - vh * k) / 2 };
+  ctx.save();
+  ctx.translate(W, 0); ctx.scale(-1, 1);   // 鏡像表示
+  ctx.drawImage(video, geo.dx, geo.dy, geo.dw, geo.dh);
+  ctx.restore();
+}
+
+// 骨格（肩 11,12）を画面座標に変換。鏡像なので x は反転する
+function toScreen(lm) {
+  return { x: cv.width - (lm.x * geo.dw + geo.dx), y: lm.y * geo.dh + geo.dy };
+}
+
+function computeTarget() {
+  if (!pose || !pose[11] || !pose[12]) return null;
+  const A = toScreen(pose[12]);
+  const B = toScreen(pose[11]);
+  const dist = Math.hypot(B.x - A.x, B.y - A.y);
+  if (dist < 10) return null;
+  return {
+    x: (A.x + B.x) / 2,
+    y: (A.y + B.y) / 2,
+    s: dist / SHOULDER_W,
+    rot: Math.atan2(B.y - A.y, B.x - A.x),
+  };
+}
+
+function drawGarment() {
+  if (!garment) return;
+  const scaleK = sizeEl.value / 100;
+  let g;
+  if (smooth) {
+    g = { x: smooth.x + offset.x, y: smooth.y + offset.y, s: smooth.s * scaleK, rot: smooth.rot };
+  } else {
+    const base = cv.width * 0.5 / SHOULDER_W;
+    g = { x: cv.width / 2 + offset.x, y: cv.height * 0.4 + offset.y, s: base * scaleK, rot: 0 };
+  }
+  ctx.save();
+  ctx.translate(g.x, g.y);
+  ctx.rotate(g.rot);
+  ctx.scale(g.s, g.s);
+  ctx.drawImage(garment, -ANCHOR.x, -ANCHOR.y, 600, 700);
+  ctx.restore();
+}
+
+function updateSmooth(t) {
+  if (!t) return;
+  const a = 0.45;
+  if (!smooth) { smooth = { ...t }; return; }
+  for (const k of ['x', 'y', 's', 'rot']) smooth[k] += (t[k] - smooth[k]) * a;
+}
+
+function loop() {
+  if (video.readyState >= 2 && video.videoWidth) {
+    fit();
+    drawVideo();
+    if (landmarker && video.currentTime !== lastVideoTime) {
+      lastVideoTime = video.currentTime;
+      try {
+        const res = landmarker.detectForVideo(video, performance.now());
+        pose = res.landmarks && res.landmarks[0] ? res.landmarks[0] : null;
+      } catch (err) { pose = null; }
+    }
+    updateSmooth(computeTarget());
+    drawGarment();
+  }
+  requestAnimationFrame(loop);
+}
+
+// 服のドラッグで位置の微調整
+cv.addEventListener('pointerdown', e => {
+  drag = { x: e.clientX, y: e.clientY, ox: offset.x, oy: offset.y };
+  cv.setPointerCapture(e.pointerId);
+});
+cv.addEventListener('pointermove', e => {
+  if (!drag) return;
+  offset.x = drag.ox + (e.clientX - drag.x);
+  offset.y = drag.oy + (e.clientY - drag.y);
+});
+cv.addEventListener('pointerup', () => { drag = null; });
+cv.addEventListener('pointercancel', () => { drag = null; });
+
+document.getElementById('shotBtn').onclick = () => {
+  cv.toBlob(blob => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'tryon.png';
+    a.click();
+  }, 'image/png');
+};
+
+document.getElementById('startBtn').onclick = async () => {
+  const btn = document.getElementById('startBtn');
+  btn.disabled = true;
+  try {
+    statusEl.textContent = 'カメラ起動中…';
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+    video.srcObject = stream;
+    await video.play();
+    statusEl.textContent = 'モデル読込中…';
+    const vision = await import(LIB_URL);
+    const fileset = await vision.FilesetResolver.forVisionTasks(WASM_URL);
+    const opts = (delegate) => ({
+      baseOptions: { modelAssetPath: MODEL_URL, delegate },
+      runningMode: 'VIDEO',
+      numPoses: 1,
+    });
+    try {
+      landmarker = await vision.PoseLandmarker.createFromOptions(fileset, opts('GPU'));
+    } catch (e) {
+      landmarker = await vision.PoseLandmarker.createFromOptions(fileset, opts('CPU'));
+    }
+    statusEl.textContent = '追従中';
+  } catch (err) {
+    statusEl.textContent = 'エラー: ' + (err.message || err);
+    btn.disabled = false;
+  }
+};
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
