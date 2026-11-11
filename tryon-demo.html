@@ -15,6 +15,7 @@ footer{padding:8px;display:flex;gap:8px;align-items:center;overflow-x:auto}
 .item{width:64px;height:64px;flex:0 0 auto;border-radius:8px;border:2px solid transparent;background:#222;padding:2px}
 .item.on{border-color:#ff3d7f}
 button,.filebtn{background:#ff3d7f;color:#fff;border:0;border-radius:8px;padding:10px 12px;font-size:14px;flex:0 0 auto;cursor:pointer}
+button:disabled{opacity:.4}
 .filebtn input{display:none}
 .filebtn{display:inline-block}
 input[type=range]{width:100px;flex:0 0 auto}
@@ -23,7 +24,7 @@ input[type=range]{width:100px;flex:0 0 auto}
 <body>
 <header>
   <span>疑似試着デモ</span>
-  <span style="font-size:12px;opacity:.7">服をタップ→画面をドラッグで位置調整</span>
+  <span style="font-size:12px;opacity:.7">服をドラッグで位置調整／サイズは下のバー</span>
 </header>
 <div id="stage">
   <canvas id="cv"></canvas>
@@ -34,7 +35,8 @@ input[type=range]{width:100px;flex:0 0 auto}
   <div id="thumbs" style="display:flex;gap:8px"></div>
   <label class="filebtn">PNG追加<input id="file" type="file" accept="image/png,image/*"></label>
   <span style="font-size:12px">サイズ</span>
-  <input id="size" type="range" min="50" max="200" value="100">
+  <input id="size" type="range" min="50" max="200" value="90">
+  <button id="resetBtn">位置リセット</button>
   <button id="shotBtn">保存</button>
 </footer>
 <video id="v" playsinline muted autoplay style="display:none"></video>
@@ -51,6 +53,11 @@ const video = document.getElementById('v');
 const statusEl = document.getElementById('status');
 const sizeEl = document.getElementById('size');
 
+const GW = 1200, GH = 1400, GS = 2;
+const SHOULDER_W = 480;
+const ANCHOR = { x: 300, y: 120 };
+const VIS_MIN = 0.5;
+
 let landmarker = null;
 let lastVideoTime = -1;
 let pose = null;
@@ -60,14 +67,11 @@ let offset = { x: 0, y: 0 };
 let smooth = null;
 let drag = null;
 
-// 服の基準：肩の左右端が (60,120)(540,120)、肩中央 (300,120)
-const SHOULDER_W = 480;
-const ANCHOR = { x: 300, y: 120 };
-
 function makeShirt(color) {
   const c = document.createElement('canvas');
-  c.width = 600; c.height = 700;
+  c.width = GW; c.height = GH;
   const g = c.getContext('2d');
+  g.scale(GS, GS);
   g.fillStyle = color;
   g.beginPath();
   g.moveTo(170, 40); g.lineTo(60, 120); g.lineTo(0, 260); g.lineTo(110, 300);
@@ -92,37 +96,37 @@ function setGarment(img, btn) {
   if (btn) btn.classList.add('on');
 }
 
+function thumbFrom(src) {
+  const t = document.createElement('canvas');
+  t.width = 60; t.height = 60;
+  t.getContext('2d').drawImage(src, 0, 0, 60, 60);
+  t.style.width = '100%'; t.style.height = '100%';
+  return t;
+}
+
 const thumbs = document.getElementById('thumbs');
 presets.forEach((p, i) => {
   const b = document.createElement('button');
   b.className = 'item';
-  const t = document.createElement('canvas');
-  t.width = 60; t.height = 60;
-  t.getContext('2d').drawImage(p.img, 0, 0, 60, 60);
-  t.style.width = '100%'; t.style.height = '100%';
-  b.appendChild(t);
+  b.appendChild(thumbFrom(p.img));
   b.onclick = () => setGarment(p.img, b);
   thumbs.appendChild(b);
   if (i === 0) setGarment(p.img, b);
 });
 
-// アップロードしたPNGを 600x700 に収める（肩の位置はおおよそ上から17%）
 document.getElementById('file').addEventListener('change', async e => {
   const f = e.target.files[0];
+  e.target.value = '';
   if (!f) return;
   const bmp = await createImageBitmap(f);
   const c = document.createElement('canvas');
-  c.width = 600; c.height = 700;
-  const k = Math.min(600 / bmp.width, 700 / bmp.height);
+  c.width = GW; c.height = GH;
+  const k = Math.min(GW / bmp.width, GH / bmp.height);
   const w = bmp.width * k, h = bmp.height * k;
-  c.getContext('2d').drawImage(bmp, (600 - w) / 2, 0, w, h);
+  c.getContext('2d').drawImage(bmp, (GW - w) / 2, 0, w, h);
   const b = document.createElement('button');
   b.className = 'item';
-  const t = document.createElement('canvas');
-  t.width = 60; t.height = 60;
-  t.getContext('2d').drawImage(c, 0, 0, 60, 60);
-  t.style.width = '100%'; t.style.height = '100%';
-  b.appendChild(t);
+  b.appendChild(thumbFrom(c));
   b.onclick = () => setGarment(c, b);
   thumbs.appendChild(b);
   setGarment(c, b);
@@ -140,20 +144,20 @@ function drawVideo() {
   const k = Math.max(W / vw, H / vh);
   geo = { dw: vw * k, dh: vh * k, dx: (W - vw * k) / 2, dy: (H - vh * k) / 2 };
   ctx.save();
-  ctx.translate(W, 0); ctx.scale(-1, 1);   // 鏡像表示
+  ctx.translate(W, 0); ctx.scale(-1, 1);
   ctx.drawImage(video, geo.dx, geo.dy, geo.dw, geo.dh);
   ctx.restore();
 }
 
-// 骨格（肩 11,12）を画面座標に変換。鏡像なので x は反転する
 function toScreen(lm) {
   return { x: cv.width - (lm.x * geo.dw + geo.dx), y: lm.y * geo.dh + geo.dy };
 }
 
 function computeTarget() {
   if (!pose || !pose[11] || !pose[12]) return null;
-  const A = toScreen(pose[12]);
-  const B = toScreen(pose[11]);
+  if ((pose[11].visibility ?? 1) < VIS_MIN || (pose[12].visibility ?? 1) < VIS_MIN) return null;
+  const P1 = toScreen(pose[11]), P2 = toScreen(pose[12]);
+  const [A, B] = P1.x < P2.x ? [P1, P2] : [P2, P1];
   const dist = Math.hypot(B.x - A.x, B.y - A.y);
   if (dist < 10) return null;
   return {
@@ -177,8 +181,8 @@ function drawGarment() {
   ctx.save();
   ctx.translate(g.x, g.y);
   ctx.rotate(g.rot);
-  ctx.scale(g.s, g.s);
-  ctx.drawImage(garment, -ANCHOR.x, -ANCHOR.y, 600, 700);
+  ctx.scale(g.s / GS, g.s / GS);
+  ctx.drawImage(garment, -ANCHOR.x * GS, -ANCHOR.y * GS, GW, GH);
   ctx.restore();
 }
 
@@ -206,7 +210,6 @@ function loop() {
   requestAnimationFrame(loop);
 }
 
-// 服のドラッグで位置の微調整
 cv.addEventListener('pointerdown', e => {
   drag = { x: e.clientX, y: e.clientY, ox: offset.x, oy: offset.y };
   cv.setPointerCapture(e.pointerId);
@@ -218,6 +221,8 @@ cv.addEventListener('pointermove', e => {
 });
 cv.addEventListener('pointerup', () => { drag = null; });
 cv.addEventListener('pointercancel', () => { drag = null; });
+
+document.getElementById('resetBtn').onclick = () => { offset = { x: 0, y: 0 }; };
 
 document.getElementById('shotBtn').onclick = () => {
   cv.toBlob(blob => {
