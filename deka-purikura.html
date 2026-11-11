@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JUST U NEED デカプリ</title>
+<style>
+  :root { --ink:#1A1A1A; --cream:#EFE6D6; --red:#E5262B; --yellow:#F2B531; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:#111; color:#fff; font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+  .screen { display:none; height:100%; }
+  .screen.active { display:flex; }
+  button { font:inherit; cursor:pointer; border:none; border-radius:999px; padding:14px 26px; font-weight:700; font-size:18px; }
+  .primary { background:var(--yellow); color:var(--ink); }
+  .ghost { background:#2a2a2a; color:#fff; }
+  .chip { background:#2a2a2a; color:#fff; padding:10px 18px; font-size:15px; }
+  .chip.on { background:#fff; color:var(--ink); }
+  /* setup */
+  #setup { flex-direction:column; align-items:center; justify-content:center; gap:22px; padding:24px; text-align:center; }
+  #setup h1 { font-family: Impact, "Arial Black", sans-serif; font-size:56px; letter-spacing:2px; margin:0; }
+  #setup p { margin:0; color:#bbb; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; align-items:center; }
+  input[type=text] { font:inherit; font-size:20px; padding:12px 16px; border-radius:12px; border:none; width:min(420px,90vw); text-align:center; }
+  label.small { color:#bbb; font-size:14px; }
+  /* shoot */
+  #shoot { position:relative; align-items:center; justify-content:center; background:#000; }
+  #video { width:100%; height:100%; object-fit:contain; transform:scaleX(-1); }
+  #video.nomirror { transform:none; }
+  #guide { position:absolute; aspect-ratio:4/3; height:min(90vh, calc(90vw*0.75)); border:3px dashed rgba(255,255,255,.55); border-radius:20px; pointer-events:none; }
+  #count { position:absolute; font-size:200px; font-weight:900; text-shadow:0 0 30px rgba(0,0,0,.6); pointer-events:none; }
+  #flash { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; transition:opacity .35s; }
+  #shotInfo { position:absolute; top:18px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,.55); padding:8px 18px; border-radius:999px; font-weight:700; }
+  #shootBar { position:absolute; bottom:22px; display:flex; gap:12px; }
+  #thumbs { position:absolute; right:14px; top:70px; display:flex; flex-direction:column; gap:8px; }
+  #thumbs canvas { width:110px; border-radius:8px; border:2px solid #fff; }
+  /* review */
+  #review { flex-direction:row; gap:24px; padding:20px; align-items:center; justify-content:center; }
+  #preview { height:calc(100vh - 40px); max-width:40vw; object-fit:contain; background:#222; border-radius:6px; }
+  #panel { display:flex; flex-direction:column; gap:16px; max-width:420px; }
+  #panel h2 { margin:0; font-size:22px; }
+  .msg { color:#bbb; font-size:14px; min-height:1.2em; }
+  @media (max-width: 760px) { #review { flex-direction:column; overflow:auto; } #preview { max-width:80vw; height:auto; max-height:60vh; } }
+  /* print */
+  #printArea { display:none; }
+  .page { position:relative; width:210mm; height:297mm; overflow:hidden; page-break-after:always; break-after:page; }
+  .page:last-child { page-break-after:auto; break-after:auto; }
+  .tileBox { position:absolute; overflow:hidden; }
+  .tileBox img { position:absolute; left:0; }
+  .tileLabel { position:absolute; bottom:2mm; right:4mm; font:8pt sans-serif; color:#999; }
+  @media print {
+    body { background:#fff; }
+    #printArea.tiled { display:block; width:auto; height:auto; }
+    .screen { display:none !important; }
+    #printArea { display:flex; justify-content:center; align-items:center; gap:6mm; width:100%; height:100%; }
+    #printArea img { display:block; }
+  }
+</style>
+<style id="pageStyle"></style>
+</head>
+<body>
+
+<!-- 1. 設定 -->
+<section id="setup" class="screen active">
+  <h1>JUST U NEED<br>DEKA PURI</h1>
+  <p>縦長デカプリ ／ 4枚撮影 → 1枚の台紙に</p>
+  <div>
+    <label class="small">真ん中の文字</label><br>
+    <input type="text" id="bandText" value="I ♥ NAGASAKI" maxlength="24">
+  </div>
+  <div>
+    <label class="small">台紙の色</label>
+    <div class="row" id="colorChips">
+      <button class="chip on" data-color="white">ホワイト</button>
+      <button class="chip" data-color="black">ブラック</button>
+      <button class="chip" data-color="yellow">イエロー</button>
+      <button class="chip" data-color="red">レッド</button>
+    </div>
+  </div>
+  <div>
+    <label class="small">カメラ</label>
+    <div class="row" id="camChips">
+      <button class="chip on" data-cam="user">前のカメラ</button>
+      <button class="chip" data-cam="environment">後ろのカメラ</button>
+    </div>
+  </div>
+  <div class="row">
+    <button class="primary" id="btnStart">撮影へ進む</button>
+  </div>
+  <p class="msg" id="setupMsg"></p>
+  <input type="file" id="fileInput" accept="image/*" capture="user" hidden>
+</section>
+
+<!-- 2. 撮影 -->
+<section id="shoot" class="screen">
+  <video id="video" autoplay playsinline muted></video>
+  <div id="guide"></div>
+  <div id="shotInfo">1 / 4</div>
+  <div id="thumbs"></div>
+  <div id="count"></div>
+  <div id="flash"></div>
+  <div id="shootBar">
+    <button class="ghost" id="btnBack">戻る</button>
+    <button class="primary" id="btnShoot">撮影スタート（5秒×4枚）</button>
+  </div>
+</section>
+
+<!-- 3. 仕上げ -->
+<section id="review" class="screen">
+  <img id="preview" alt="デカプリのプレビュー">
+  <div id="panel">
+    <h2>できあがり</h2>
+    <div>
+      <label class="small">フィルター</label>
+      <div class="row" id="filterChips">
+        <button class="chip on" data-filter="none">そのまま</button>
+        <button class="chip" data-filter="bright">明るめ</button>
+        <button class="chip" data-filter="film">フィルム</button>
+        <button class="chip" data-filter="mono">モノクロ</button>
+      </div>
+    </div>
+    <div>
+      <label class="small">台紙の色</label>
+      <div class="row" id="colorChips2">
+        <button class="chip" data-color="white">ホワイト</button>
+        <button class="chip" data-color="black">ブラック</button>
+        <button class="chip" data-color="yellow">イエロー</button>
+        <button class="chip" data-color="red">レッド</button>
+      </div>
+    </div>
+    <div>
+      <label class="small">印刷する紙</label>
+      <div class="row" id="paperChips">
+        <button class="chip on" data-paper="A4-tile">ドデカ（A4×2枚つなぎ・約57cm）</button>
+        <button class="chip" data-paper="A4-2">A4・2本（友達と分ける）</button>
+        <button class="chip" data-paper="A4-1">A4・1本</button>
+      </div>
+    </div>
+    <div class="row" style="justify-content:flex-start">
+      <button class="primary" id="btnPrint">印刷する</button>
+      <button class="ghost" id="btnSave">画像を保存</button>
+    </div>
+    <div class="row" style="justify-content:flex-start">
+      <button class="ghost" id="btnRetake">撮り直す</button>
+      <button class="ghost" id="btnNew">最初から</button>
+    </div>
+    <p class="msg" id="reviewMsg"></p>
+    <p class="msg">印刷のときは「拡大・縮小なし（100%）」で。ドデカは2枚目を1枚目の下に貼ってつなげます。</p>
+  </div>
+</section>
+
+<div id="printArea"></div>
+<canvas id="work" hidden></canvas>
+
+<script>
+(() => {
+  // ===== 台紙のレイアウト（px） =====
+  const W = 1200, M = 60, PW = 1080, PH = 810, TOP = 60, GAP = 36, BAND = 220, BOTTOM = 300, R = 24;
+  const Y = [TOP, TOP + PH + GAP];
+  Y.push(Y[1] + PH + BAND);
+  Y.push(Y[2] + PH + GAP);
+  const H = Y[3] + PH + BOTTOM;
+  const SHOTS = 4, COUNTDOWN = 5;
+
+  const COLORS = {
+    white:  { bg:'#FFFFFF', ink:'#1A1A1A', sub:'#666' },
+    black:  { bg:'#1A1A1A', ink:'#FFFFFF', sub:'#aaa' },
+    yellow: { bg:'#F2B531', ink:'#1A1A1A', sub:'#4a3a10' },
+    red:    { bg:'#E5262B', ink:'#FFFFFF', sub:'#ffd9d9' },
+  };
+  const PAPERS = {
+    'A4-tile': { size:'A4', w:210, h:297, n:1, tile:true },
+    'A4-2': { size:'A4', w:210, h:297, n:2 },
+    'A4-1': { size:'A4', w:210, h:297, n:1 },
+  };
+
+  const state = { color:'white', cam:'user', filter:'none', paper:'A4-tile', shots:[], stream:null, busy:false, useFile:false };
+  const $ = id => document.getElementById(id);
+  const video = $('video');
+
+  function show(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
+  }
+  function chipGroup(groupId, key, onChange) {
+    $(groupId).addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      [...$(groupId).children].forEach(c => c.classList.toggle('on', c === b));
+      state[key] = b.dataset[key];
+      onChange && onChange();
+    });
+  }
+  function syncChips(groupId, key) {
+    [...$(groupId).children].forEach(c => c.classList.toggle('on', c.dataset[key] === state[key]));
+  }
+  chipGroup('colorChips', 'color');
+  chipGroup('camChips', 'cam');
+  chipGroup('colorChips2', 'color', render);
+  chipGroup('filterChips', 'filter', render);
+  chipGroup('paperChips', 'paper');
+
+  // ===== カメラ =====
+  async function startCamera() {
+    stopCamera();
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('nocam');
+    state.stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: state.cam, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false
+    });
+    video.srcObject = state.stream;
+    video.classList.toggle('nomirror', state.cam !== 'user');
+    await video.play();
+  }
+  function stopCamera() {
+    if (state.stream) { state.stream.getTracks().forEach(t => t.stop()); state.stream = null; }
+  }
+
+  // 4:3に中央で切り抜いてキャンバスに
+  function cropTo43(src, sw, sh, mirror) {
+    const c = document.createElement('canvas');
+    c.width = PW; c.height = PH;
+    const ctx = c.getContext('2d');
+    const target = 4 / 3;
+    let cw = sw, ch = sw / target;
+    if (ch > sh) { ch = sh; cw = sh * target; }
+    const sx = (sw - cw) / 2, sy = (sh - ch) / 2;
+    if (mirror) { ctx.translate(PW, 0); ctx.scale(-1, 1); }
+    ctx.drawImage(src, sx, sy, cw, ch, 0, 0, PW, PH);
+    return c;
+  }
+
+  function addThumb(c) {
+    const t = document.createElement('canvas');
+    t.width = 220; t.height = 165;
+    t.getContext('2d').drawImage(c, 0, 0, 220, 165);
+    $('thumbs').appendChild(t);
+  }
+  function updateInfo() { $('shotInfo').textContent = `${Math.min(state.shots.length + 1, SHOTS)} / ${SHOTS}`; }
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  async function runSequence() {
+    if (state.busy) return;
+    state.busy = true;
+    $('btnShoot').disabled = true; $('btnBack').disabled = true;
+    while (state.shots.length < SHOTS) {
+      updateInfo();
+      for (let i = COUNTDOWN; i > 0; i--) { $('count').textContent = i; await sleep(1000); }
+      $('count').textContent = '';
+      const shot = cropTo43(video, video.videoWidth, video.videoHeight, state.cam === 'user');
+      state.shots.push(shot); addThumb(shot);
+      $('flash').style.opacity = 1; await sleep(120); $('flash').style.opacity = 0;
+      await sleep(1500);
+    }
+    state.busy = false;
+    $('btnShoot').disabled = false; $('btnBack').disabled = false;
+    stopCamera();
+    finish();
+  }
+
+  // カメラが使えないとき：端末のカメラアプリで1枚ずつ撮る
+  function askFile() {
+    $('setupMsg').textContent = `カメラを直接使えないため、端末のカメラで1枚ずつ撮ります（${state.shots.length + 1} / ${SHOTS}）`;
+    $('fileInput').setAttribute('capture', state.cam);
+    $('btnStart').textContent = `写真を撮る（${state.shots.length + 1} / ${SHOTS}）`;
+  }
+  $('fileInput').addEventListener('change', async e => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    const img = new Image();
+    img.src = URL.createObjectURL(f);
+    await img.decode();
+    state.shots.push(cropTo43(img, img.naturalWidth, img.naturalHeight, false));
+    URL.revokeObjectURL(img.src);
+    if (state.shots.length >= SHOTS) { $('btnStart').textContent = '撮影へ進む'; $('setupMsg').textContent = ''; finish(); }
+    else askFile();
+  });
+
+  $('btnStart').addEventListener('click', async () => {
+    if (state.useFile) { $('fileInput').click(); return; }
+    state.shots = []; $('thumbs').innerHTML = '';
+    try {
+      await startCamera();
+      show('shoot'); updateInfo();
+    } catch (err) {
+      state.useFile = true; state.shots = [];
+      askFile();
+    }
+  });
+  $('btnBack').addEventListener('click', () => { stopCamera(); show('setup'); });
+  $('btnShoot').addEventListener('click', runSequence);
+  document.addEventListener('keydown', e => {
+    if (e.code === 'Space' && $('shoot').classList.contains('active')) { e.preventDefault(); runSequence(); }
+  });
+
+  // ===== フィルター（全ブラウザで動くよう画素を直接処理） =====
+  function filtered(src) {
+    if (state.filter === 'none') return src;
+    const c = document.createElement('canvas'); c.width = src.width; c.height = src.height;
+    const ctx = c.getContext('2d'); ctx.drawImage(src, 0, 0);
+    const d = ctx.getImageData(0, 0, c.width, c.height), p = d.data;
+    for (let i = 0; i < p.length; i += 4) {
+      let r = p[i], g = p[i+1], b = p[i+2];
+      if (state.filter === 'mono') {
+        let y = 0.299*r + 0.587*g + 0.114*b;
+        y = (y - 128) * 1.12 + 128;
+        r = g = b = y;
+      } else if (state.filter === 'film') {
+        r = r*0.95 + 18; g = g*0.92 + 12; b = b*0.82 + 10;
+        r = (r - 128) * 0.95 + 128; g = (g - 128) * 0.95 + 128; b = (b - 128) * 0.95 + 128;
+      } else if (state.filter === 'bright') {
+        r = r*1.08 + 12; g = g*1.08 + 12; b = b*1.06 + 14;
+        r = (r - 128) * 0.94 + 128; g = (g - 128) * 0.94 + 128; b = (b - 128) * 0.94 + 128;
+      }
+      p[i] = r; p[i+1] = g; p[i+2] = b;
+    }
+    ctx.putImageData(d, 0, 0);
+    return c;
+  }
+
+  // ===== 台紙を合成 =====
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+  function fitText(ctx, text, maxW, size, weight, family) {
+    let s = size;
+    do { ctx.font = `${weight} ${s}px ${family}`; s -= 4; } while (ctx.measureText(text).width > maxW && s > 20);
+  }
+  function render() {
+    if (state.shots.length < SHOTS) return;
+    const c = $('work'); c.width = W; c.height = H;
+    const ctx = c.getContext('2d');
+    const col = COLORS[state.color];
+    ctx.fillStyle = col.bg; ctx.fillRect(0, 0, W, H);
+    state.shots.forEach((s, i) => {
+      ctx.save(); roundRect(ctx, M, Y[i], PW, PH, R); ctx.clip();
+      ctx.drawImage(filtered(s), M, Y[i], PW, PH); ctx.restore();
+    });
+    const display = 'Impact, "Arial Black", "Hiragino Sans", sans-serif';
+    // 真ん中の帯
+    const band = ($('bandText').value || '').trim();
+    if (band) {
+      ctx.fillStyle = col.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      fitText(ctx, band, PW - 40, 130, '900', display);
+      ctx.fillText(band, W / 2, Y[1] + PH + BAND / 2 + 4);
+    }
+    // 下のロゴ
+    ctx.fillStyle = col.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    fitText(ctx, 'JUST U NEED', PW, 150, '900', display);
+    ctx.fillText('JUST U NEED', W / 2, Y[3] + PH + 175);
+    const d = new Date();
+    const date = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
+    ctx.fillStyle = col.sub; ctx.font = `700 40px system-ui, sans-serif`;
+    ctx.fillText(`${date}   @justuneed_japan`, W / 2, Y[3] + PH + 250);
+    $('preview').src = c.toDataURL('image/jpeg', 0.92);
+  }
+
+  function finish() {
+    syncChips('colorChips2', 'color');
+    render();
+    $('reviewMsg').textContent = '';
+    show('review');
+  }
+
+  // ===== 保存・印刷 =====
+  $('btnSave').addEventListener('click', () => {
+    const c = $('work');
+    c.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `JUN-dekapuri-${Date.now()}.jpg`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      $('reviewMsg').textContent = '保存できない端末では、プレビュー画像を長押しして保存してください。';
+    }, 'image/jpeg', 0.95);
+  });
+
+  $('btnPrint').addEventListener('click', () => {
+    const p = PAPERS[state.paper];
+    const margin = 6; // mm
+    const src = $('work').toDataURL('image/jpeg', 0.95);
+    const area = $('printArea');
+    area.innerHTML = '';
+    area.classList.toggle('tiled', !!p.tile);
+    $('pageStyle').textContent = `@page { size: ${p.size} portrait; margin: 0; }` +
+      (p.tile ? '' : ` @media print { #printArea { width:${p.w}mm; height:${p.h}mm; } }`);
+    if (p.tile) {
+      // 縦長の台紙を上下2枚に分けて印刷し、つなげて約57cmにする
+      const half = p.h - margin * 2;           // 1枚に載る高さ
+      let stripH = half * 2, stripW = stripH * W / H;
+      if (stripW > p.w - margin * 2) { stripW = p.w - margin * 2; stripH = stripW * H / W; }
+      const boxH = stripH / 2;
+      for (let i = 0; i < 2; i++) {
+        const page = document.createElement('div'); page.className = 'page';
+        const box = document.createElement('div'); box.className = 'tileBox';
+        box.style.left = ((p.w - stripW) / 2) + 'mm'; box.style.top = margin + 'mm';
+        box.style.width = stripW + 'mm'; box.style.height = boxH + 'mm';
+        const img = new Image(); img.src = src;
+        img.style.width = stripW + 'mm'; img.style.height = stripH + 'mm';
+        img.style.top = (i === 0 ? 0 : -boxH) + 'mm';
+        box.appendChild(img); page.appendChild(box);
+        const lbl = document.createElement('div'); lbl.className = 'tileLabel';
+        lbl.textContent = i === 0 ? '1枚目（上）' : '2枚目（下）';
+        page.appendChild(lbl);
+        area.appendChild(page);
+      }
+    } else {
+      let stripH = p.h - margin * 2;
+      let stripW = stripH * W / H;
+      const maxW = (p.w - margin * 2 - (p.n - 1) * 6) / p.n;
+      if (stripW > maxW) { stripW = maxW; stripH = stripW * H / W; }
+      for (let i = 0; i < p.n; i++) {
+        const img = new Image(); img.src = src;
+        img.style.width = stripW + 'mm'; img.style.height = stripH + 'mm';
+        if (state.color === 'white') img.style.outline = '0.2mm dashed #ccc'; // 切り取り線の目安
+        area.appendChild(img);
+      }
+    }
+    setTimeout(() => {
+      try { window.print(); }
+      catch (e) { $('reviewMsg').textContent = 'この画面では印刷できません。画像を保存して印刷してください。'; }
+    }, 300);
+  });
+
+  $('btnRetake').addEventListener('click', async () => {
+    state.shots = []; $('thumbs').innerHTML = '';
+    if (state.useFile) { show('setup'); askFile(); return; }
+    try { await startCamera(); show('shoot'); updateInfo(); } catch (e) { show('setup'); }
+  });
+  $('btnNew').addEventListener('click', () => {
+    state.shots = []; $('thumbs').innerHTML = ''; state.useFile = false;
+    $('btnStart').textContent = '撮影へ進む'; $('setupMsg').textContent = '';
+    syncChips('colorChips', 'color');
+    show('setup');
+  });
+})();
+</script>
+</body>
+</html>
