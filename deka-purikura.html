@@ -42,6 +42,17 @@
   .cell.sel { border-color:var(--yellow); }
   .cell.sel .badge { display:flex; }
   .cell.dim img { opacity:.55; }
+  /* print layout diagram */
+  #layout { gap:14px; align-items:flex-start; }
+  .lp { display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .lsheet { position:relative; width:84px; height:119px; background:#fff; border-radius:4px; overflow:hidden; }
+  .lsheet.cut { border-bottom:2px dashed #E5262B; }
+  .lstrip { position:absolute; left:50%; transform:translateX(-50%); width:50px; height:200px; border-radius:4px; display:flex; flex-direction:column; gap:3px; padding:4px; box-sizing:border-box; }
+  .lstrip.full { top:8px; height:104px; }
+  .lstrip.top { top:6px; }
+  .lstrip.bottom { top:-100px; }
+  .lstrip i { flex:1; background:#777; border-radius:2px; opacity:.6; }
+  .llabel { font-size:12px; color:#bbb; text-align:center; }
   /* review */
   #review { flex-direction:row; gap:24px; padding:20px; align-items:center; justify-content:center; }
   #preview { height:calc(100vh - 40px); max-width:40vw; object-fit:contain; background:#222; border-radius:6px; }
@@ -154,6 +165,7 @@
         <button class="chip" data-paper="A4-2">A4・2本（友達と分ける）</button>
         <button class="chip" data-paper="A4-1">A4・1本</button>
       </div>
+      <div id="layout" class="row" style="margin-top:10px"></div>
     </div>
     <div class="row" style="justify-content:flex-start">
       <button class="primary" id="btnPrint">印刷する</button>
@@ -216,7 +228,7 @@
   chipGroup('camChips', 'cam');
   chipGroup('colorChips2', 'color', render);
   chipGroup('filterChips', 'filter', render);
-  chipGroup('paperChips', 'paper');
+  chipGroup('paperChips', 'paper', () => drawLayout());
 
   // ===== カメラ =====
   async function startCamera() {
@@ -406,6 +418,22 @@
     ctx.fillStyle = col.sub; ctx.font = `700 40px system-ui, sans-serif`;
     ctx.fillText(`${date}   @justuneed_japan`, W / 2, Y[3] + PH + 250);
     $('preview').src = c.toDataURL('image/jpeg', 0.92);
+    drawLayout();
+  }
+
+  // 印刷する紙の並びをイメージ図で表示（紙の選択と台紙の色に合わせて変わる）
+  function drawLayout() {
+    const p = PAPERS[state.paper];
+    const bg = COLORS[state.color].bg;
+    const page = (inner, label, cls) => `<div class="lp"><div class="lsheet ${cls || ''}">${inner}</div><div class="llabel">${label}</div></div>`;
+    const strip = (pos) => `<div class="lstrip ${pos}" style="background:${bg}"><i></i><i></i><i></i><i></i></div>`;
+    let html;
+    if (p.tile) {
+      html = page(strip('top'), '1枚目（上）', 'cut') + page(strip('bottom'), '2枚目（下）');
+    } else {
+      html = Array.from({ length: p.n }, (_, k) => page(strip('full'), p.n > 1 ? `${k + 1}本目` : '1本')).join('');
+    }
+    $('layout').innerHTML = html;
   }
 
   function finish() {
