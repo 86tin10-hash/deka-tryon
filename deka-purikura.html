@@ -35,7 +35,7 @@
   /* pick */
   #pick { flex-direction:column; align-items:center; justify-content:flex-start; gap:14px; padding:20px; overflow:auto; }
   #pick h2 { margin:0; font-size:22px; }
-  #grid { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:10px; width:min(960px,100%); }
+  #grid { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; width:min(900px,100%); }
   .cell { position:relative; border:3px solid transparent; border-radius:10px; overflow:hidden; background:#222; padding:0; }
   .cell img { width:100%; display:block; }
   .cell .badge { position:absolute; top:6px; left:6px; width:34px; height:34px; border-radius:50%; background:var(--yellow); color:var(--ink); font-weight:900; display:none; align-items:center; justify-content:center; }
@@ -82,19 +82,10 @@
 <!-- 1. 設定 -->
 <section id="setup" class="screen active">
   <h1>JUST U NEED<br>DEKA PURI</h1>
-  <p>縦長デカプリ ／ 8枚撮影 → 好きな4枚を選んで1枚の台紙に</p>
+  <p>縦長デカプリ ／ 6枚撮影 → 好きな4枚を選んで1枚の台紙に</p>
   <div>
     <label class="small">真ん中の文字</label><br>
     <input type="text" id="bandText" value="I ♥ NAGASAKI" maxlength="24">
-  </div>
-  <div>
-    <label class="small">台紙の色</label>
-    <div class="row" id="colorChips">
-      <button class="chip on" data-color="white">ホワイト</button>
-      <button class="chip" data-color="black">ブラック</button>
-      <button class="chip" data-color="yellow">イエロー</button>
-      <button class="chip" data-color="red">レッド</button>
-    </div>
   </div>
   <div>
     <label class="small">カメラ</label>
@@ -110,20 +101,20 @@
   <input type="file" id="fileInput" accept="image/*" capture="user" hidden>
 </section>
 
-<!-- 2. 撮影（8枚） -->
+<!-- 2. 撮影（6枚） -->
 <section id="shoot" class="screen">
   <video id="video" autoplay playsinline muted></video>
   <div id="guide"></div>
-  <div id="shotInfo">1 / 8</div>
+  <div id="shotInfo">1 / 6</div>
   <div id="count"></div>
   <div id="flash"></div>
   <div id="shootBar">
     <button class="ghost" id="btnBack">戻る</button>
-    <button class="primary" id="btnShoot">撮影スタート（5秒×8枚）</button>
+    <button class="primary" id="btnShoot">撮影スタート（5秒×6枚）</button>
   </div>
 </section>
 
-<!-- 3. 選ぶ（8枚から4枚・順番も選ぶ） -->
+<!-- 3. 選ぶ（6枚から4枚・順番も選ぶ） -->
 <section id="pick" class="screen">
   <h2>4枚を選ぶ</h2>
   <p class="msg">選んだ順に上から並びます。もう一度押すと外れます。</p>
@@ -192,7 +183,7 @@
   Y.push(Y[1] + PH + BAND);
   Y.push(Y[2] + PH + GAP);
   const H = Y[3] + PH + BOTTOM;
-  const TAKE = 8, USE = 4, COUNTDOWN = 5;
+  const TAKE = 6, USE = 4, COUNTDOWN = 5;
 
   const COLORS = {
     white:  { bg:'#FFFFFF', ink:'#1A1A1A', sub:'#666' },
@@ -224,7 +215,6 @@
   function syncChips(groupId, key) {
     [...$(groupId).children].forEach(c => c.classList.toggle('on', c.dataset[key] === state[key]));
   }
-  chipGroup('colorChips', 'color');
   chipGroup('camChips', 'cam');
   chipGroup('colorChips2', 'color', render);
   chipGroup('filterChips', 'filter', render);
@@ -316,7 +306,7 @@
     if (e.code === 'Space' && $('shoot').classList.contains('active')) { e.preventDefault(); runSequence(); }
   });
 
-  // ===== 8枚から4枚を選ぶ（選んだ順が上から並ぶ） =====
+  // ===== 6枚から4枚を選ぶ（選んだ順が上から並ぶ） =====
   function startPick() {
     state.picked = []; state.final = null;
     const grid = $('grid'); grid.innerHTML = '';
@@ -518,7 +508,7 @@
     if (!window.confirm(CONFIRM_MSG)) return;
     state.shots = []; state.picked = []; state.final = null; state.useFile = false;
     $('btnStart').textContent = '撮影へ進む'; $('setupMsg').textContent = '';
-    syncChips('colorChips', 'color');
+    state.color = 'white'; syncChips('colorChips2', 'color');
     show('setup');
   });
 })();
