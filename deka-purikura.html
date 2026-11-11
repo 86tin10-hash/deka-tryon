@@ -16,12 +16,14 @@
   .ghost { background:#2a2a2a; color:#fff; }
   .chip { background:#2a2a2a; color:#fff; padding:10px 18px; font-size:15px; }
   .chip.on { background:#fff; color:var(--ink); }
+  /* setup */
   #setup { flex-direction:column; align-items:center; justify-content:center; gap:22px; padding:24px; text-align:center; }
   #setup h1 { font-family: Impact, "Arial Black", sans-serif; font-size:56px; letter-spacing:2px; margin:0; }
   #setup p { margin:0; color:#bbb; }
   .row { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; align-items:center; }
   input[type=text] { font:inherit; font-size:20px; padding:12px 16px; border-radius:12px; border:none; width:min(420px,90vw); text-align:center; }
   label.small { color:#bbb; font-size:14px; }
+  /* shoot */
   #shoot { position:relative; align-items:center; justify-content:center; background:#000; }
   #video { width:100%; height:100%; object-fit:contain; transform:scaleX(-1); }
   #video.nomirror { transform:none; }
@@ -30,6 +32,7 @@
   #flash { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; transition:opacity .35s; }
   #shotInfo { position:absolute; top:18px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,.55); padding:8px 18px; border-radius:999px; font-weight:700; }
   #shootBar { position:absolute; bottom:22px; display:flex; gap:12px; }
+  /* pick */
   #pick { flex-direction:column; align-items:center; justify-content:flex-start; gap:14px; padding:20px; overflow:auto; }
   #pick h2 { margin:0; font-size:22px; }
   #grid { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; width:min(900px,100%); }
@@ -39,6 +42,7 @@
   .cell.sel { border-color:var(--yellow); }
   .cell.sel .badge { display:flex; }
   .cell.dim img { opacity:.55; }
+  /* print layout diagram */
   #layout { gap:14px; align-items:flex-start; }
   .lp { display:flex; flex-direction:column; align-items:center; gap:4px; }
   .lsheet { position:relative; width:84px; height:119px; background:#fff; border-radius:4px; overflow:hidden; }
@@ -49,15 +53,19 @@
   .lstrip.bottom { top:-100px; }
   .lstrip i { flex:1; background:#777; border-radius:2px; opacity:.6; }
   .llabel { font-size:12px; color:#bbb; text-align:center; }
+  /* review */
   #review { flex-direction:row; gap:24px; padding:20px; align-items:center; justify-content:center; }
   #preview { height:calc(100vh - 40px); max-width:40vw; object-fit:contain; background:#222; border-radius:6px; }
   #panel { display:flex; flex-direction:column; gap:16px; max-width:420px; }
   #panel h2 { margin:0; font-size:22px; }
   .msg { color:#bbb; font-size:14px; min-height:1.2em; }
   @media (max-width: 760px) { #review { flex-direction:column; overflow:auto; } #preview { max-width:80vw; height:auto; max-height:60vh; } #grid { grid-template-columns:repeat(2, minmax(0,1fr)); } }
+  /* print */
   #printArea { display:none; }
-  .page { position:relative; width:210mm; height:297mm; overflow:hidden; page-break-after:always; break-after:page; }
+  .page { position:relative; width:210mm; height:297mm; overflow:hidden; page-break-after:always; break-after:page; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   .page:last-child { page-break-after:auto; break-after:auto; }
+  .tileBox { position:absolute; overflow:hidden; }
+  .tileBox img { position:absolute; left:0; }
   .tileLabel { position:absolute; bottom:2mm; right:4mm; font:8pt sans-serif; color:#999; }
   @media print {
     body { background:#fff; }
@@ -70,6 +78,7 @@
 </head>
 <body>
 
+<!-- 1. 設定 -->
 <section id="setup" class="screen active">
   <h1>JUST U NEED<br>DEKA PURI</h1>
   <p>縦長デカプリ ／ 6枚撮影 → 好きな4枚を選んで1枚の台紙に</p>
@@ -91,6 +100,7 @@
   <input type="file" id="fileInput" accept="image/*" capture="user" hidden>
 </section>
 
+<!-- 2. 撮影（6枚） -->
 <section id="shoot" class="screen">
   <video id="video" autoplay playsinline muted></video>
   <div id="guide"></div>
@@ -103,6 +113,7 @@
   </div>
 </section>
 
+<!-- 3. 選ぶ（6枚から4枚・同じ写真も選べる） -->
 <section id="pick" class="screen">
   <h2>4枚を選ぶ</h2>
   <p class="msg">選んだ順に上から並びます。同じ写真を何度でも選べます。</p>
@@ -115,6 +126,7 @@
   <p class="msg" id="pickMsg"></p>
 </section>
 
+<!-- 4. 仕上げ -->
 <section id="review" class="screen">
   <img id="preview" alt="デカプリのプレビュー">
   <div id="panel">
@@ -172,7 +184,8 @@
 
 <script>
 (() => {
-  const W = 1200, M = 60, PW = 1080, PH = 810, TOP = 60, GAP = 36, BAND = 220, BOTTOM = 300, R = 24;
+  // ===== 台紙のレイアウト（px） =====
+  const W = 1200, M = 60, PW = 1080, PH = 810, TOP = 60, GAP = 36, BAND = 360, BOTTOM = 300, R = 24;
   const Y = [TOP, TOP + PH + GAP];
   Y.push(Y[1] + PH + BAND);
   Y.push(Y[2] + PH + GAP);
@@ -187,6 +200,7 @@
   };
   const PAPERS = {
     'A4-tile': { size:'A4', w:210, h:297, n:1, tile:true },
+    'A4-2': { size:'A4', w:210, h:297, n:2 },
     'A4-1': { size:'A4', w:210, h:297, n:1 },
   };
 
@@ -213,6 +227,7 @@
   chipGroup('filterChips', 'filter', render);
   chipGroup('paperChips', 'paper', () => drawLayout());
 
+  // 人数（印刷部数）：1人から増減
   function setCopies(n) {
     state.copies = Math.max(1, Math.min(99, n));
     $('copiesNum').textContent = state.copies;
@@ -221,6 +236,7 @@
   $('btnPlus').addEventListener('click', () => setCopies(state.copies + 1));
   $('btnMinus').addEventListener('click', () => setCopies(state.copies - 1));
 
+  // ===== カメラ =====
   async function startCamera() {
     stopCamera();
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('nocam');
@@ -235,6 +251,7 @@
     if (state.stream) { state.stream.getTracks().forEach(t => t.stop()); state.stream = null; }
   }
 
+  // 4:3に中央で切り抜いてキャンバスに
   function cropTo43(src, sw, sh, mirror) {
     const c = document.createElement('canvas');
     c.width = PW; c.height = PH;
@@ -270,6 +287,7 @@
     startPick();
   }
 
+  // カメラが使えないとき：端末のカメラアプリで1枚ずつ撮る
   function askFile() {
     $('setupMsg').textContent = `カメラを直接使えないため、端末のカメラで1枚ずつ撮ります（${state.shots.length + 1} / ${TAKE}）`;
     $('fileInput').setAttribute('capture', state.cam);
@@ -304,6 +322,7 @@
     if (e.code === 'Space' && $('shoot').classList.contains('active')) { e.preventDefault(); runSequence(); }
   });
 
+  // ===== 6枚から4枚を選ぶ（選んだ順が上から並ぶ・同じ写真の重複OK） =====
   function startPick() {
     state.picked = []; state.final = null;
     const grid = $('grid'); grid.innerHTML = '';
@@ -327,6 +346,7 @@
   }
   function refreshPick() {
     [...$('grid').children].forEach((b, i) => {
+      // この写真が何番目に選ばれたか（重複すると複数の番号）
       const orders = state.picked.map((v, j) => (v === i ? j + 1 : 0)).filter(x => x > 0);
       b.classList.toggle('sel', orders.length > 0);
       b.classList.toggle('dim', state.picked.length === USE && orders.length === 0);
@@ -342,6 +362,7 @@
     finish();
   });
 
+  // ===== フィルター（全ブラウザで動くよう画素を直接処理） =====
   function filtered(src) {
     if (state.filter === 'none') return src;
     const c = document.createElement('canvas'); c.width = src.width; c.height = src.height;
@@ -366,6 +387,7 @@
     return c;
   }
 
+  // ===== 台紙を合成 =====
   function roundRect(ctx, x, y, w, h, r) {
     ctx.beginPath();
     ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
@@ -386,12 +408,14 @@
       ctx.drawImage(filtered(s), M, Y[i], PW, PH); ctx.restore();
     });
     const display = 'Impact, "Arial Black", "Hiragino Sans", sans-serif';
+    // 真ん中の帯
     const band = ($('bandText').value || '').trim();
     if (band) {
       ctx.fillStyle = col.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       fitText(ctx, band, PW - 40, 130, '900', display);
       ctx.fillText(band, W / 2, Y[1] + PH + BAND / 2 + 4);
     }
+    // 下のロゴ
     ctx.fillStyle = col.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
     fitText(ctx, 'JUST U NEED', PW, 150, '900', display);
     ctx.fillText('JUST U NEED', W / 2, Y[3] + PH + 175);
@@ -403,6 +427,7 @@
     drawLayout();
   }
 
+  // 印刷する紙の並びをイメージ図で表示（紙・台紙の色・人数に合わせて変わる）
   function drawLayout() {
     const p = PAPERS[state.paper];
     const bg = COLORS[state.color].bg;
@@ -412,7 +437,7 @@
     if (p.tile) {
       html = page(strip('top'), '1枚目（上）', 'cut') + page(strip('bottom'), '2枚目（下）');
     } else {
-      html = page(strip('full'), '1本');
+      html = Array.from({ length: p.n }, (_, k) => page(strip('full'), p.n > 1 ? `${k + 1}本目` : '1本')).join('');
     }
     html += `<div class="llabel" style="width:100%">${state.copies}人分（${state.copies}部）印刷します</div>`;
     $('layout').innerHTML = html;
@@ -425,6 +450,7 @@
     show('review');
   }
 
+  // ===== 保存・印刷 =====
   $('btnSave').addEventListener('click', () => {
     const c = $('work');
     c.toBlob(blob => {
@@ -439,38 +465,37 @@
 
   $('btnPrint').addEventListener('click', () => {
     const p = PAPERS[state.paper];
-    const margin = 0;
-    const contentH = p.h - margin * 2;
-    const src = $('work');
+    const margin = 0;                      // 余白なし（用紙いっぱい）
+    const contentH = p.h - margin * 2;     // 297mm
+    const src = $('work');                 // 台紙全体（W x H）
     const area = $('printArea');
     area.innerHTML = '';
     $('pageStyle').textContent = `@page { size: ${p.size} portrait; margin: 0; }`;
-    const makePage = (sx, sy, sw, sh, wmm, hmm, label) => {
+    // 台紙の一部（sx,sy,sw,sh）を切り出して、1ページに mm 指定で配置する
+    const makePage = (sx, sy, sw, sh, wmm, hmm) => {
       const c = document.createElement('canvas');
       c.width = sw; c.height = sh;
       c.getContext('2d').drawImage(src, sx, sy, sw, sh, 0, 0, sw, sh);
       const page = document.createElement('div'); page.className = 'page';
+      page.style.background = COLORS[state.color].bg;   // 台紙の色で用紙の端まで塗る
       const img = new Image();
       img.src = c.toDataURL('image/jpeg', 0.95);
       img.style.cssText = `position:absolute;left:${(p.w - wmm) / 2}mm;top:${margin}mm;width:${wmm}mm;height:${hmm}mm`;
       page.appendChild(img);
-      if (label) {
-        const lbl = document.createElement('div'); lbl.className = 'tileLabel'; lbl.textContent = label;
-        page.appendChild(lbl);
-      }
       return page;
     };
     const pages = [];
     for (let c = 0; c < state.copies; c++) {
-      const who = state.copies > 1 ? `・${c + 1}人目` : '';
       if (p.tile) {
+        // ドデカ：台紙を上下半分に切り、A4 2枚に分けて印刷（2枚目の上端が1枚目の下端につながる）
         const half = H / 2;
-        const wmm = contentH * W / half;
-        pages.push(makePage(0, 0, W, half, wmm, contentH, `1枚目（上）${who}`));
-        pages.push(makePage(0, half, W, half, wmm, contentH, `2枚目（下）${who}`));
+        const wmm = contentH * W / half;   // 同じ縮尺で高さ285mm
+        pages.push(makePage(0, 0, W, half, wmm, contentH));
+        pages.push(makePage(0, half, W, half, wmm, contentH));
       } else {
+        // A4・1本：台紙全体を1ページに収める
         const wmm = contentH * W / H;
-        pages.push(makePage(0, 0, W, H, wmm, contentH, who ? `1本${who}` : ''));
+        pages.push(makePage(0, 0, W, H, wmm, contentH));
       }
     }
     pages.forEach(pg => area.appendChild(pg));
