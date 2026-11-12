@@ -2,265 +2,1326 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>疑似試着デモ</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>バーチャル試着 v5</title>
 <style>
 *{box-sizing:border-box}
-body{margin:0;background:#111;color:#fff;font-family:-apple-system,"Hiragino Sans",sans-serif;height:100vh;height:100dvh;display:flex;flex-direction:column}
-header{padding:8px 12px;font-size:14px;display:flex;justify-content:space-between;align-items:center;gap:8px}
-#stage{flex:1;position:relative;min-height:0;overflow:hidden}
-canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
-#status{position:absolute;left:8px;top:8px;background:rgba(0,0,0,.55);padding:4px 8px;border-radius:6px;font-size:12px}
-footer{padding:8px;display:flex;gap:8px;align-items:center;overflow-x:auto}
-.item{width:64px;height:64px;flex:0 0 auto;border-radius:8px;border:2px solid transparent;background:#222;padding:2px}
-.item.on{border-color:#ff3d7f}
-button,.filebtn{background:#ff3d7f;color:#fff;border:0;border-radius:8px;padding:10px 12px;font-size:14px;flex:0 0 auto;cursor:pointer}
-button:disabled{opacity:.4}
-.filebtn input{display:none}
-.filebtn{display:inline-block}
-input[type=range]{width:100px;flex:0 0 auto}
+html,body{margin:0;height:100%;background:#0e0e10;color:#eee;font-family:-apple-system,"Hiragino Sans",sans-serif}
+body{display:grid;grid-template-columns:210px 1fr;height:100vh;height:100dvh}
+aside{background:#17171b;padding:12px;overflow-y:auto;display:flex;flex-direction:column;gap:9px}
+aside h3{margin:6px 0 0;font-size:13px;opacity:.7;font-weight:600}
+#list{display:flex;flex-direction:column;gap:10px}
+.prod{background:#f1f1f3;border-radius:10px;padding:6px;cursor:grab;user-select:none;touch-action:none;border:3px solid transparent}
+.prod img{width:100%;display:block;pointer-events:none}
+.prod span{display:block;font-size:12px;margin-top:4px;pointer-events:none;color:#222;font-weight:600}
+.prod.on{border-color:#ff3d7f}
+.btn{background:#2c2c36;color:#fff;border:0;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;text-align:center}
+.btn.ai{background:#5b3df5}
+.btn input{display:none}
+label.small{font-size:12px;display:block}
+label.small input[type=range],select{width:100%}
+select{background:#2c2c36;color:#fff;border:0;border-radius:6px;padding:6px}
+main{position:relative;overflow:hidden;background:#000}
+#banner{position:absolute;top:0;left:0;right:0;z-index:3;text-align:center;padding:12px 10px 24px;font-size:16px;font-weight:700;background:linear-gradient(#000c,#0000);pointer-events:none}
+#stage{position:absolute;inset:0}
+canvas#cv{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+#v{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+#msg{position:absolute;left:12px;bottom:12px;z-index:3;background:rgba(0,0,0,.7);padding:8px 12px;border-radius:8px;font-size:13px;max-width:78%;line-height:1.5}
+#msg.err{background:#7a1020}
+#fps{position:absolute;right:10px;bottom:10px;z-index:3;font-size:11px;opacity:.6}
+#start{position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#0e0e10;padding:20px;text-align:center}
+#start button{background:#ff3d7f;color:#fff;border:0;border-radius:12px;padding:16px 28px;font-size:18px;font-weight:700;cursor:pointer}
+#start p{margin:0;opacity:.7;font-size:13px;line-height:1.7}
+#ghost{position:fixed;z-index:10;width:90px;pointer-events:none;opacity:.85;transform:translate(-50%,-50%)}
+main.over{box-shadow:inset 0 0 0 4px #ff3d7f}
+#aiView{position:absolute;inset:0;z-index:6;background:#000d;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px}
+#aiView img{max-width:100%;max-height:80%;border-radius:8px}
+@media (max-width:760px){
+  body{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  aside{flex-direction:row;overflow-x:auto;overflow-y:hidden;align-items:center}
+  #list{flex-direction:row}
+  .prod{width:88px;flex:0 0 auto}
+  aside h3,aside label.small{display:none}
+}
 </style>
 </head>
 <body>
-<header>
-  <span>疑似試着デモ</span>
-  <span style="font-size:12px;opacity:.7">服をドラッグで位置調整／サイズは下のバー</span>
-</header>
-<div id="stage">
-  <canvas id="cv"></canvas>
-  <div id="status">準備中</div>
-</div>
-<footer>
-  <button id="startBtn">カメラ開始</button>
-  <div id="thumbs" style="display:flex;gap:8px"></div>
-  <label class="filebtn">PNG追加<input id="file" type="file" accept="image/png,image/*"></label>
-  <span style="font-size:12px">サイズ</span>
-  <input id="size" type="range" min="50" max="200" value="90">
-  <button id="resetBtn">位置リセット</button>
-  <button id="shotBtn">保存</button>
-</footer>
-<video id="v" playsinline muted autoplay style="display:none"></video>
+<aside>
+  <h3>商品（ドラッグ または タップ）</h3>
+  <div id="list"></div>
+  <label class="btn">+ 自分の服の画像<input id="file" type="file" accept="image/*"></label>
+  <label class="small"><input type="checkbox" id="autoBg" checked> 背景を自動で消す</label>
+  <label class="small">背景の消し具合<input id="tol" type="range" min="10" max="120" value="55"></label>
+
+  <h3>フィット</h3>
+  <label class="small">大きさ<input id="size" type="range" min="70" max="150" value="100"></label>
+  <label class="small"><input type="checkbox" id="useMask" checked> 体の輪郭に合わせる（はみ出しを消す）</label>
+  <label class="small">シワ・陰影（実際の体から）<input id="shade" type="range" min="0" max="100" value="15"></label>
+  <label class="small">シルエット
+    <select id="fitStyle">
+      <option value="1.0">タイト</option>
+      <option value="1.12" selected>レギュラー</option>
+      <option value="1.26">オーバーサイズ</option>
+    </select>
+  </label>
+  <label class="small"><input type="checkbox" id="matchLight" checked> 部屋の明るさ・色味に合わせる</label>
+  <label class="small"><input type="checkbox" id="hands" checked> 手を服の手前に出す</label>
+  <label class="small">認識の精度
+    <select id="model">
+      <option value="lite">軽い（iPad向け）</option>
+      <option value="full" selected>標準</option>
+      <option value="heavy">高精度（PC向け・重い）</option>
+    </select>
+  </label>
+  <button id="resetBtn" class="btn">位置・大きさリセット</button>
+  <button id="offBtn" class="btn">服を脱ぐ</button>
+  <label class="small"><input type="checkbox" id="showBones"> 骨格を表示（確認用）</label>
+
+  <h3>本物のAI試着（ライブ・Decart）</h3>
+  <label class="small" style="opacity:.75">Anywearと同じAI（Lucy VTON）で、カメラ映像そのものに服を着せます。カメラ映像はDecartのサーバーに送られます。無料クレジットの範囲で使い、切れたら止めてください。</label>
+  <input id="dkKey" type="password" placeholder="DecartのAPIキーを貼り付け" style="width:100%;padding:8px;border-radius:6px;border:0;background:#2c2c36;color:#fff">
+  <label class="small"><input type="checkbox" id="dkSave"> キーをこの端末に保存する</label>
+  <label class="small">自動停止（クレジットの使いすぎ防止）
+    <select id="dkLimit"><option value="30">30秒</option><option value="60" selected>1分</option><option value="180">3分</option><option value="600">10分</option></select>
+  </label>
+  <button id="dkBtn" class="btn ai">AIライブ試着を開始</button>
+  <div id="dkInfo" class="small" style="font-size:12px;opacity:.85;min-height:1.2em"></div>
+
+  <h3>高画質AI（静止画・実験的）</h3>
+  <button id="aiBtn" class="btn ai">今の姿をAIで試着</button>
+  <label class="small" style="opacity:.7">写真と服の画像を Hugging Face の無料デモ（IDM-VTON）に送信します。混雑時は数分かかるか失敗します。</label>
+</aside>
+
+<main id="drop">
+  <div id="banner">Drag a product onto yourself.</div>
+  <div id="stage"><canvas id="cv"></canvas><video id="v" playsinline muted autoplay></video>
+    <video id="aiLive" playsinline muted autoplay style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;z-index:2;background:#000"></video></div>
+  <div id="start">
+    <button id="startBtn">カメラを起動</button>
+    <p>カメラ映像はこの端末の中だけで処理します。<br>（「高画質AI」ボタンを押した時だけ、その1枚を外部に送ります）</p>
+  </div>
+  <div id="msg" hidden></div>
+  <div id="fps"></div>
+  <div id="aiView"><img id="aiImg" alt="AI試着の結果"><div style="display:flex;gap:10px"><button class="btn" id="aiSave">保存</button><button class="btn" id="aiClose">閉じる</button></div></div>
+</main>
 
 <script type="module">
-const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
-const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
 const LIB_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm';
+const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
+const MODEL = n => `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_${n}/float16/1/pose_landmarker_${n}.task`;
+const GRADIO_URL = 'https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js';
 
-const cv = document.getElementById('cv');
-const ctx = cv.getContext('2d');
-const stage = document.getElementById('stage');
-const video = document.getElementById('v');
-const statusEl = document.getElementById('status');
-const sizeEl = document.getElementById('size');
+// ===== 服の座標系 =====
+// 服は「平置き」の画像として、論理座標 800x760（実体は2倍）で持つ。
+// 体との対応（リグ）：肩の縫い目 LS/RS、腰 LH/RH、脇の下 LA/RA、袖の向き dirL/dirR
+const LW = 800, LH_ = 760, GS = 2, GW = LW * GS, GH = LH_ * GS;
+const BASE = { LS: { x: 260, y: 120 }, RS: { x: 540, y: 120 }, LH: { x: 300, y: 630 }, RH: { x: 500, y: 630 }, LA: { x: 272, y: 300 }, RA: { x: 528, y: 300 }, LB: { x: 278, y: 700 }, RB: { x: 522, y: 700 } };
+const REST_SW = BASE.RS.x - BASE.LS.x;   // 280
+const GX = 32, GY = 30;                   // 変形の格子（25×25の升目。GPUで描くので細かくできる）
+const VIS = 0.5;
 
-const GW = 1200, GH = 1400, GS = 2;
-const SHOULDER_W = 480;
-const ANCHOR = { x: 300, y: 120 };
-const VIS_MIN = 0.5;
+const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d');
+const layer = document.createElement('canvas'), lctx = layer.getContext('2d');
+const shadeC = document.createElement('canvas'), sctx = shadeC.getContext('2d');
+const maskC = document.createElement('canvas'), mctx = maskC.getContext('2d');
+const shadowC = document.createElement('canvas'), shctx = shadowC.getContext('2d');
+const video = $('v'), stage = $('stage'), main = $('drop'), list = $('list');
+const msg = $('msg'), sizeEl = $('size');
+const FILTER_OK = 'filter' in ctx;
 
-let landmarker = null;
-let lastVideoTime = -1;
-let pose = null;
+let landmarker = null, trackOn = false, camOn = false, lastT = -1, pose = null, hasMask = false;
 let geo = { dx: 0, dy: 0, dw: 1, dh: 1 };
-let garment = null;
-let offset = { x: 0, y: 0 };
-let smooth = null;
-let drag = null;
+let item = null, offset = { x: 0, y: 0 }, sm = null, lost = 0;
+let facingBack = false, backScore = 0;   // 背中を向いているか（数フレーム続いたら切り替える）
+const hem = { HL: null, HR: null };
 
-function makeShirt(color) {
-  const c = document.createElement('canvas');
-  c.width = GW; c.height = GH;
-  const g = c.getContext('2d');
-  g.scale(GS, GS);
-  g.fillStyle = color;
-  g.beginPath();
-  g.moveTo(170, 40); g.lineTo(60, 120); g.lineTo(0, 260); g.lineTo(110, 300);
-  g.lineTo(110, 680); g.lineTo(490, 680); g.lineTo(490, 300); g.lineTo(600, 260);
-  g.lineTo(540, 120); g.lineTo(430, 40); g.lineTo(370, 90);
-  g.quadraticCurveTo(300, 130, 230, 90); g.closePath(); g.fill();
-  g.fillStyle = 'rgba(255,255,255,.85)';
-  g.font = 'bold 60px sans-serif'; g.textAlign = 'center';
-  g.fillText('JUN', 300, 420);
+function say(t, err) { msg.hidden = !t; msg.textContent = t || ''; msg.classList.toggle('err', !!err); }
+const V = {
+  add: (a, b) => ({ x: a.x + b.x, y: a.y + b.y }), sub: (a, b) => ({ x: a.x - b.x, y: a.y - b.y }),
+  mul: (a, k) => ({ x: a.x * k, y: a.y * k }), len: a => Math.hypot(a.x, a.y),
+  norm: a => { const l = Math.hypot(a.x, a.y) || 1; return { x: a.x / l, y: a.y / l }; },
+  lerp: (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }),
+  rot: (a, r) => ({ x: a.x * Math.cos(r) - a.y * Math.sin(r), y: a.x * Math.sin(r) + a.y * Math.cos(r) }),
+};
+const smoothstep = (e0, e1, x) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
+
+// ================================================================
+//  サンプル商品（手描きではなく、布の質感・縫い目・陰影まで描き込む）
+// ================================================================
+const noiseTile = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d'), d = g.createImageData(128, 128);
+  for (let i = 0; i < d.data.length; i += 4) { const v = 110 + Math.random() * 40; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 255; }
+  g.putImageData(d, 0, 0); return c;
+})();
+function knitTile(col, dark) {
+  const c = document.createElement('canvas'); c.width = 12; c.height = 14;
+  const g = c.getContext('2d'); g.fillStyle = col; g.fillRect(0, 0, 12, 14);
+  g.strokeStyle = dark; g.lineWidth = 1.6;
+  g.beginPath(); g.moveTo(0.5, 0); g.lineTo(6, 7); g.lineTo(11.5, 0); g.moveTo(0.5, 7); g.lineTo(6, 14); g.lineTo(11.5, 7); g.stroke();
   return c;
 }
+function weaveTile(col, dark) {
+  const c = document.createElement('canvas'); c.width = c.height = 6;
+  const g = c.getContext('2d'); g.fillStyle = col; g.fillRect(0, 0, 6, 6);
+  g.fillStyle = dark; g.fillRect(0, 0, 3, 3); g.fillRect(3, 3, 3, 3);
+  return c;
+}
+// 平置きの服の輪郭（胴体＋袖）
+function sleevePoly(S, dir, len, w0, w1) {
+  const n = { x: -dir.y, y: dir.x }, E = V.add(S, V.mul(dir, len));
+  return [V.add(S, V.mul(n, -w0 / 2)), V.add(E, V.mul(n, -w1 / 2)), V.add(E, V.mul(n, w1 / 2)), V.add(S, V.mul(n, w0 / 2))];
+}
+// 図形の向き（時計回り／反時計回り）を胴とそろえて描く：向きが逆だと重なった所が穴になる
+const TORSO_PTS = [[330, 72], [260, 102], [252, 160], [272, 310], [285, 690], [515, 690], [528, 310], [548, 160], [540, 102], [470, 72]];
+const area = pts => { let a = 0; for (let i = 0; i < pts.length; i++) { const [x1, y1] = pts[i], [x2, y2] = pts[(i + 1) % pts.length]; a += x1 * y2 - x2 * y1; } return a; };
+const TORSO_SIGN = Math.sign(area(TORSO_PTS));
+function polyPath(g, pts) {
+  const arr = pts.map(p => [p.x, p.y]);
+  if (Math.sign(area(arr)) !== TORSO_SIGN) arr.reverse();
+  g.moveTo(arr[0][0], arr[0][1]); for (const [x, y] of arr.slice(1)) g.lineTo(x, y); g.closePath();
+}
+function garmentPath(g, spec) {
+  const { LS, RS } = BASE;
+  const hemL = { x: 285, y: 690 }, hemR = { x: 515, y: 690 };
+  g.beginPath();
+  // 胴体
+  g.moveTo(330, 72); g.lineTo(LS.x, LS.y - 18); g.lineTo(LS.x - 8, LS.y + 40); g.lineTo(272, 310);
+  g.quadraticCurveTo(284, 500, hemL.x, hemL.y); g.lineTo(hemR.x, hemR.y);
+  g.quadraticCurveTo(516, 500, 528, 310); g.lineTo(RS.x + 8, RS.y + 40); g.lineTo(RS.x, RS.y - 18); g.lineTo(470, 72);
+  g.quadraticCurveTo(400, spec.back ? 92 : (spec.neckDepth || 118), 330, 72); g.closePath();
+  // 袖
+  const sin = spec.sleeveIn || 0;
+  for (const [S, dir] of [[{ x: LS.x + 6 + sin, y: LS.y + 28 }, spec.dirL], [{ x: RS.x - 6 - sin, y: RS.y + 28 }, spec.dirR]]) {
+    const p = sleevePoly(S, dir, spec.sleeveLen, 140, spec.long ? 96 : 120);
+    polyPath(g, p);
+    // 脇の下の切れ込みを布で埋める（胴の脇〜袖の内側）
+    const sd = S.x < 400 ? -1 : 1;
+    const inner = Math.abs(p[0].x - 400) < Math.abs(p[3].x - 400) ? p[0] : p[3], outer = inner === p[0] ? p[3] : p[0];
+    const yb = 345, q = V.add(inner, V.mul(dir, (yb - inner.y) / dir.y));
+    polyPath(g, [{ x: 400 + sd * 142, y: 108 }, { x: 400 + sd * 126, y: yb }, q, outer]);
+  }
+}
+function makeSample(spec) {
+  const c = document.createElement('canvas'); c.width = GW; c.height = GH;
+  const g = c.getContext('2d'); g.scale(GS, GS);
+  const { LS, RS } = BASE;
+  const back = !!spec.back;
+  // フード（体の後ろ）
+  if (spec.type === 'hoodie' && !back) {
+    g.fillStyle = shade(spec.color, -18); g.beginPath(); g.ellipse(400, 70, 120, 64, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = shade(spec.color, -40); g.beginPath(); g.ellipse(400, 78, 82, 40, 0, 0, Math.PI * 2); g.fill();
+  }
+  garmentPath(g, spec);
+  g.save(); g.clip();
+  // 地の色と生地の質感
+  g.fillStyle = spec.color; g.fillRect(0, 0, LW, LH_);
+  if (spec.texture === 'knit') { g.globalAlpha = .55; g.fillStyle = g.createPattern(knitTile(spec.color, shade(spec.color, -22)), 'repeat'); g.fillRect(0, 0, LW, LH_); g.globalAlpha = 1; }
+  if (spec.texture === 'weave') { g.globalAlpha = .35; g.fillStyle = g.createPattern(weaveTile(spec.color, shade(spec.color, -14)), 'repeat'); g.fillRect(0, 0, LW, LH_); g.globalAlpha = 1; }
+  g.globalCompositeOperation = 'overlay'; g.globalAlpha = spec.texture === 'fleece' ? .5 : .28;
+  g.fillStyle = g.createPattern(noiseTile, 'repeat'); g.fillRect(0, 0, LW, LH_);
+  g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
 
-const presets = [
-  { name: '黒', img: makeShirt('#1c1c1c') },
-  { name: '白', img: makeShirt('#f2f2f2') },
-  { name: '赤', img: makeShirt('#d6336c') },
+  // 柄：セーターの白い曲線（胴と袖）
+  if (spec.type === 'sweater') {
+    g.strokeStyle = 'rgba(255,255,255,.92)'; g.lineWidth = 11; g.lineCap = 'round';
+    for (let k = 0; k < 4; k++) {
+      g.beginPath();
+      for (let x = 60; x <= 740; x += 6) {
+        const y = 230 + k * 105 + Math.sin((x + k * 55) / 30) * 24 + Math.sin(x / 11) * 2;
+        x === 60 ? g.moveTo(x, y) : g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+    g.globalAlpha = .45; g.fillStyle = g.createPattern(knitTile('rgba(0,0,0,0)', 'rgba(0,0,0,.35)'), 'repeat'); g.fillRect(0, 0, LW, LH_); g.globalAlpha = 1;
+  }
+  // 陰影（光は左上から。脇・袖の内側・裾にかけて落とす）
+  const lg = g.createLinearGradient(0, 0, LW, LH_);
+  lg.addColorStop(0, 'rgba(255,255,255,.14)'); lg.addColorStop(.5, 'rgba(0,0,0,0)'); lg.addColorStop(1, 'rgba(0,0,0,.22)');
+  g.fillStyle = lg; g.fillRect(0, 0, LW, LH_);
+  const side = g.createLinearGradient(272, 0, 528, 0);
+  side.addColorStop(0, 'rgba(0,0,0,.26)'); side.addColorStop(.18, 'rgba(0,0,0,0)'); side.addColorStop(.82, 'rgba(0,0,0,0)'); side.addColorStop(1, 'rgba(0,0,0,.26)');
+  g.fillStyle = side; g.fillRect(260, 280, 280, 420);
+  // シワ（明暗のペアで立体感を出す）
+  const fold = (pts, w) => {
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    g.strokeStyle = 'rgba(0,0,0,.20)'; g.lineWidth = w; g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,.10)'; g.lineWidth = w * .6; g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p[0] + w * .7, p[1] - w * .3) : g.moveTo(p[0] + w * .7, p[1] - w * .3)); g.stroke();
+  };
+  // 縫い目（ステッチ）
+  g.setLineDash([5, 4]); g.lineWidth = 1.8; g.strokeStyle = 'rgba(0,0,0,.35)';
+  const line = pts => { g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)); g.stroke(); };
+  line([{ x: 330, y: 76 }, { x: LS.x + 4, y: LS.y - 12 }]); line([{ x: 470, y: 76 }, { x: RS.x - 4, y: RS.y - 12 }]);
+  g.beginPath(); g.moveTo(LS.x + 2, LS.y - 14); g.quadraticCurveTo(LS.x + 22, LS.y + 100, 276, 306); g.stroke();
+  g.beginPath(); g.moveTo(RS.x - 2, RS.y - 14); g.quadraticCurveTo(RS.x - 22, RS.y + 100, 524, 306); g.stroke();
+  g.setLineDash([]);
+  // 裾と袖口のリブ（縦の細い線）
+  const rib = (pts, h) => {
+    g.save(); g.fillStyle = shade(spec.color, -10);
+    g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)); g.closePath(); g.fill();
+    g.clip(); g.strokeStyle = 'rgba(0,0,0,.22)'; g.lineWidth = 1.4;
+    for (let x = 0; x < LW; x += 5) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x + h * 0.0, LH_); g.stroke(); }
+    g.restore();
+  };
+  if (spec.rib) {
+    rib([{ x: 285, y: 650 }, { x: 515, y: 650 }, { x: 515, y: 692 }, { x: 285, y: 692 }]);
+    if (spec.long) for (const [S, dir] of [[{ x: LS.x + 6, y: LS.y + 28 }, spec.dirL], [{ x: RS.x - 6, y: RS.y + 28 }, spec.dirR]]) {
+      const n = { x: -dir.y, y: dir.x }, E = V.add(S, V.mul(dir, spec.sleeveLen)), E0 = V.add(S, V.mul(dir, spec.sleeveLen - 40));
+      rib([V.add(E0, V.mul(n, -45)), V.add(E, V.mul(n, -44)), V.add(E, V.mul(n, 44)), V.add(E0, V.mul(n, 45))]);
+    }
+  }
+  // 種類ごとの細部（前側だけ）
+  if (spec.type === 'hoodie' && !back) {
+    g.fillStyle = shade(spec.color, 6); g.strokeStyle = 'rgba(255,255,255,.18)'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(300, 450); g.lineTo(500, 450); g.lineTo(530, 600); g.lineTo(270, 600); g.closePath(); g.fill();
+    g.setLineDash([4, 4]); g.stroke(); g.setLineDash([]);
+    g.strokeStyle = 'rgba(0,0,0,.4)'; g.beginPath(); g.moveTo(300, 450); g.lineTo(280, 595); g.moveTo(500, 450); g.lineTo(520, 595); g.stroke();
+  }
+  if (spec.type === 'shirt' && back) {   // 背中：ヨーク（肩の切り替え）とセンターのタック
+    g.strokeStyle = 'rgba(0,0,0,.28)'; g.lineWidth = 1.6; g.setLineDash([4, 3]);
+    g.beginPath(); g.moveTo(268, 200); g.quadraticCurveTo(400, 214, 532, 200); g.stroke(); g.setLineDash([]);
+    g.strokeStyle = 'rgba(0,0,0,.18)'; g.lineWidth = 3; g.beginPath(); g.moveTo(400, 206); g.lineTo(400, 300); g.stroke();
+  }
+  if (spec.type === 'shirt' && !back) {
+    g.fillStyle = shade(spec.color, 4); g.fillRect(388, 110, 24, 590);
+    g.strokeStyle = 'rgba(0,0,0,.25)'; g.lineWidth = 1.5; g.strokeRect(388, 110, 24, 590);
+    for (let y = 170; y <= 650; y += 80) {
+      g.fillStyle = '#f7f7f7'; g.beginPath(); g.arc(400, y, 7, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 1; g.stroke();
+      g.fillStyle = 'rgba(0,0,0,.4)'; g.fillRect(397, y - 2, 2, 2); g.fillRect(401, y + 1, 2, 2);
+    }
+    g.strokeStyle = 'rgba(0,0,0,.3)'; g.lineWidth = 1.5; g.setLineDash([4, 3]);
+    g.strokeRect(440, 200, 62, 72); g.setLineDash([]);
+  }
+  g.restore();
+  // 襟
+  if (spec.type === 'turtle') {
+    g.fillStyle = shade(spec.color, -6); g.beginPath(); g.roundRect(318, 20, 164, 100, 30); g.fill();
+    g.save(); g.clip(); g.strokeStyle = 'rgba(0,0,0,.18)'; g.lineWidth = 2;
+    for (let x = 318; x < 482; x += 7) { g.beginPath(); g.moveTo(x, 20); g.lineTo(x, 120); g.stroke(); }
+    g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(318, 64, 164, 6); g.restore();
+  }
+  if (spec.type === 'sweater' || (spec.type === 'hoodie' && !back)) {
+    g.strokeStyle = shade(spec.color, -16); g.lineWidth = 16;
+    g.beginPath(); g.moveTo(333, 80); g.quadraticCurveTo(400, back ? 100 : 130, 467, 80); g.stroke();
+  }
+  if (spec.type === 'hoodie' && back) {   // 背中：垂れたフード
+    g.fillStyle = shade(spec.color, -8);
+    g.beginPath(); g.moveTo(312, 70); g.quadraticCurveTo(300, 200, 400, 250); g.quadraticCurveTo(500, 200, 488, 70); g.quadraticCurveTo(400, 40, 312, 70); g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 2; g.setLineDash([4, 4]); g.stroke(); g.setLineDash([]);
+    g.strokeStyle = 'rgba(0,0,0,.22)'; g.lineWidth = 6; g.beginPath(); g.moveTo(400, 80); g.lineTo(400, 240); g.stroke();
+  }
+  if (spec.type === 'hoodie' && !back) {
+    g.strokeStyle = '#e6e6e6'; g.lineWidth = 5; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(378, 104); g.bezierCurveTo(372, 170, 380, 220, 372, 270); g.stroke();
+    g.beginPath(); g.moveTo(422, 104); g.bezierCurveTo(428, 170, 420, 220, 428, 270); g.stroke();
+    g.fillStyle = '#bbb'; g.fillRect(366, 268, 12, 16); g.fillRect(422, 268, 12, 16);
+  }
+  if (spec.type === 'shirt' && back) {   // 背中の襟
+    g.fillStyle = shade(spec.color, 8); g.strokeStyle = 'rgba(0,0,0,.28)'; g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(325, 70); g.quadraticCurveTo(400, 52, 475, 70); g.lineTo(480, 104); g.quadraticCurveTo(400, 88, 320, 104); g.closePath(); g.fill(); g.stroke();
+  }
+  if (spec.type === 'shirt' && !back) {
+    g.fillStyle = shade(spec.color, 8); g.strokeStyle = 'rgba(0,0,0,.28)'; g.lineWidth = 1.5;
+    for (const s of [-1, 1]) {
+      g.beginPath(); g.moveTo(400, 118); g.lineTo(400 + s * 72, 60); g.lineTo(400 + s * 92, 74); g.lineTo(400 + s * 56, 160); g.closePath(); g.fill(); g.stroke();
+      g.fillStyle = '#f2f2f2'; g.beginPath(); g.arc(400 + s * 52, 140, 4, 0, Math.PI * 2); g.fill(); g.fillStyle = shade(spec.color, 8);
+    }
+  }
+  // 輪郭の締め（うっすら暗い縁）
+  {
+    // 服の外周だけをうっすら暗く：形を1回り小さくした範囲の外側を暗くする
+    const e = document.createElement('canvas'); e.width = GW; e.height = GH; const eg = e.getContext('2d');
+    eg.scale(GS, GS); eg.fillStyle = '#000'; garmentPath(eg, spec); eg.fill();
+    eg.setTransform(1, 0, 0, 1, 0, 0); eg.globalCompositeOperation = 'destination-out';
+    for (const [dx, dy] of [[3, 0], [-3, 0], [0, 3], [0, -3]]) { eg.save(); eg.translate(dx, dy); eg.scale(GS, GS); garmentPath(eg, spec); eg.fill(); eg.restore(); }
+    g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-atop'; g.globalAlpha = 0.28; g.drawImage(e, 0, 0); g.restore();
+  }
+  fabricLight(c, spec);
+  return c;
+}
+// ===== 布の凹凸から光と影を計算する =====
+// シワの「高さ」を低解像度で描いて拡大（自然にぼける）→ 傾きから陰影を出す
+function rand(seed) { let x = seed; return () => (x = (x * 16807) % 2147483647) / 2147483647; }
+function heightMap(spec) {
+  const S = 8, w = LW / S, h = LH_ / S;
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'); g.scale(1 / S, 1 / S);
+  g.fillStyle = '#808080'; g.fillRect(0, 0, LW, LH_);
+  const R = rand(spec.id.length * 9973 + 7);
+  const ridge = (pts, wd, amp) => {
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    for (const [col, off] of [['rgba(255,255,255,', -wd * 0.35], ['rgba(0,0,0,', wd * 0.35]]) {
+      g.strokeStyle = col + amp + ')'; g.lineWidth = wd;
+      g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x + off, y + off * 0.3) : g.moveTo(x + off, y + off * 0.3)); g.stroke();
+    }
+  };
+  // 胴：脇から中央へ流れる斜めのシワ、腰のたるみ、裾の縦ジワ
+  for (const sd of [-1, 1]) {
+    for (let k = 0; k < 4; k++) {
+      const y0 = 300 + k * 38 + R() * 20, x0 = 400 + sd * (125 - R() * 10);
+      ridge([[x0, y0], [400 + sd * (70 - k * 6), y0 + 70 + R() * 30], [400 + sd * (20 + R() * 20), y0 + 150 + R() * 40]], 26, 0.35 + R() * 0.2);
+    }
+  }
+  for (let k = 0; k < 3; k++) { const y = 560 + k * 30 + R() * 10; ridge([[300, y + R() * 10], [360, y - 8], [440, y + 6], [500, y - 4]], 22, 0.3); }
+  for (let k = 0; k < 6; k++) { const x = 305 + k * 38 + R() * 12; ridge([[x, 640], [x + R() * 10 - 5, 690]], 16, 0.25); }
+  // 袖：ひじのシワ（輪っか状）、縦のシワ、袖口のたまり
+  for (const sd of [-1, 1]) {
+    const S0 = sd < 0 ? BASE.LS : BASE.RS, dir = sd < 0 ? spec.dirL : spec.dirR, n = { x: -dir.y, y: dir.x };
+    const at = (t, o) => [S0.x + dir.x * t + n.x * o, S0.y + dir.y * t + n.y * o];
+    const rings = spec.long ? [205, 245, 400] : [95];
+    for (const t of rings) { const tt = t + R() * 12; ridge([at(tt, -50), at(tt + 18, -12), at(tt + 6, 26), at(tt + 16, 52)], 30, 0.3 + R() * 0.15); }
+    for (const o of [-22, 24]) ridge([at(40, o + R() * 8), at(spec.long ? 330 : 110, o + R() * 14)], 30, 0.14);
+  }
+  // 生地の細かいムラ
+  for (let k = 0; k < 900; k++) { g.fillStyle = `rgba(${R() > .5 ? 255 : 0},${R() > .5 ? 255 : 0},${R() > .5 ? 255 : 0},0.05)`; g.fillRect(R() * LW, R() * LH_, 6, 6); }
+  return c;
+}
+function fabricLight(c, spec) {
+  const W = c.width, H = c.height;
+  const hc = document.createElement('canvas'); hc.width = W / 2; hc.height = H / 2;
+  const hg = hc.getContext('2d', { willReadFrequently: true });
+  hg.imageSmoothingQuality = 'high'; hg.drawImage(heightMap(spec), 0, 0, hc.width, hc.height);
+  const hd = hg.getImageData(0, 0, hc.width, hc.height).data;
+  // 縁の陰（輪郭の内側を少し暗く＝丸み）：服の形を縮小→拡大してぼかす
+  const ac = document.createElement('canvas'); ac.width = W / 16; ac.height = H / 16;
+  const ag = ac.getContext('2d', { willReadFrequently: true }); ag.drawImage(c, 0, 0, ac.width, ac.height);
+  const bc = document.createElement('canvas'); bc.width = hc.width; bc.height = hc.height;
+  const bg = bc.getContext('2d', { willReadFrequently: true }); bg.imageSmoothingQuality = 'high'; bg.drawImage(ac, 0, 0, bc.width, bc.height);
+  const ad = bg.getImageData(0, 0, bc.width, bc.height).data;
+  const g = c.getContext('2d', { willReadFrequently: true }), img = g.getImageData(0, 0, W, H), p = img.data;
+  const hw = hc.width, hh = hc.height, LX = -0.55, LY = -0.83, STR = 1.5;
+  const Hgt = (x, y) => hd[(Math.min(hh - 1, Math.max(0, y)) * hw + Math.min(hw - 1, Math.max(0, x))) * 4];
+  for (let y = 0; y < H; y++) {
+    const yy = y >> 1;
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4; if (p[i + 3] < 8) continue;
+      const xx = x >> 1;
+      const dx = (Hgt(xx + 2, yy) - Hgt(xx - 2, yy)) / 510, dy = (Hgt(xx, yy + 2) - Hgt(xx, yy - 2)) / 510;
+      let L = 1 - (dx * LX + dy * LY) * STR * 4;          // 傾きが光に向くほど明るく
+      const ao = ad[(yy * hw + xx) * 4 + 3] / 255;        // 縁ほど小さい
+      L *= 0.78 + 0.22 * Math.min(1, ao * 1.15);
+      L = Math.max(0.55, Math.min(1.35, L));
+      p[i] = Math.min(255, p[i] * L); p[i + 1] = Math.min(255, p[i + 1] * L); p[i + 2] = Math.min(255, p[i + 2] * L);
+    }
+  }
+  g.putImageData(img, 0, 0);
+}
+function shade(hex, pct) {
+  const n = parseInt(hex.slice(1), 16); let r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  const f = v => Math.max(0, Math.min(255, Math.round(v + (pct > 0 ? (255 - v) : v) * pct / 100)));
+  return `rgb(${f(r)},${f(g)},${f(b)})`;
+}
+const dirFromDeg = (deg, side) => { const r = deg * Math.PI / 180; return { x: side * Math.sin(r), y: Math.cos(r) }; };
+
+// ================================================================
+//  商品リスト
+// ================================================================
+// 一覧用の商品画像：切り抜いて、明るい背景と柔らかい影の上に置く（試着用の画像とは別）
+function productShot(src) {
+  const g0 = src.getContext('2d', { willReadFrequently: true }), d = g0.getImageData(0, 0, src.width, src.height).data;
+  let x0 = src.width, y0 = src.height, x1 = -1, y1 = -1;
+  for (let y = 0; y < src.height; y += 2) for (let x = 0; x < src.width; x += 2) if (d[(y * src.width + x) * 4 + 3] > 20) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  if (x1 < 0) return src;
+  const W = 600, H = 700, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#fbfbfc'); bg.addColorStop(1, '#ececef');
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  const bw = x1 - x0 + 1, bh = y1 - y0 + 1, k = Math.min((W * 0.84) / bw, (H * 0.84) / bh);
+  const dx = (W - bw * k) / 2, dy = (H - bh * k) / 2;
+  g.save(); g.shadowColor = 'rgba(0,0,0,.22)'; g.shadowBlur = 28; g.shadowOffsetY = 14;
+  g.drawImage(src, x0, y0, bw, bh, dx, dy, bw * k, bh * k); g.restore();
+  return c;
+}
+const items = new Map();
+function addItem(def) {
+  const el = document.createElement('div');
+  el.className = 'prod'; el.dataset.id = def.id;
+  if (!def.thumb) def.thumb = productShot(def.img);
+  const im = new Image(); im.src = def.thumb.toDataURL('image/jpeg', 0.9); im.alt = def.name;
+  const s = document.createElement('span'); s.textContent = def.name;
+  el.append(im, s); list.append(el);
+  def.parts = splitGarment(def.img, def.rig);
+  def.backParts = def.backImg ? splitGarment(def.backImg, def.rig) : def.parts;
+  items.set(def.id, def);
+}
+// 服を「胴」「左袖」「右袖」の3枚に分ける（それぞれ別の動きで変形するため）
+function splitGarment(img, rig) {
+  const F = 6;   // 継ぎ目が見えないよう少し重ねる
+  const lineL = [], lineR = [];
+  for (let y = 0; y <= LH_; y += 20) { lineL.push({ x: sideLineX(rig, y, -1), y }); lineR.push({ x: sideLineX(rig, y, 1), y }); }
+  const part = (poly) => {
+    const c = document.createElement('canvas'); c.width = GW; c.height = GH;
+    const g = c.getContext('2d');
+    g.beginPath(); poly.forEach((p, i) => i ? g.lineTo(p.x * GS, p.y * GS) : g.moveTo(p.x * GS, p.y * GS)); g.closePath();
+    g.clip(); g.drawImage(img, 0, 0);
+    return { img: c, cells: occupancy(c) };
+  };
+  const torso = part([...lineL.map(p => ({ x: p.x - F, y: p.y })), ...lineR.slice().reverse().map(p => ({ x: p.x + F, y: p.y }))]);
+  // 袖は脇の下より上（袖ぐり）だけ胴に重ね、それより下は胴の縁を含めない
+  const sf = y => y <= rig.LA.y ? F : -10;
+  const left = part([{ x: -10, y: -10 }, ...lineL.map(p => ({ x: p.x + sf(p.y), y: p.y })), { x: -10, y: LH_ + 10 }]);
+  const right = part([{ x: LW + 10, y: -10 }, ...lineR.map(p => ({ x: p.x - sf(p.y), y: p.y })), { x: LW + 10, y: LH_ + 10 }]);
+  // 脇の下を埋める布：胴の脇から内側70の帯を切り出す（腕を広げた時に引き伸ばして使う）
+  const strip = side => {
+    const pts = [];
+    for (let y = rig.LA.y - 40; y <= rig.LA.y + 260; y += 20) pts.push({ x: sideLineX(rig, y, side) - side * 2, y });
+    for (let y = rig.LA.y + 260; y >= rig.LA.y - 40; y -= 20) pts.push({ x: sideLineX(rig, y, side) - side * 72, y });
+    const c = document.createElement('canvas'); c.width = GW; c.height = GH;
+    const g = c.getContext('2d'); g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p.x * GS, p.y * GS) : g.moveTo(p.x * GS, p.y * GS)); g.closePath();
+    g.clip(); g.drawImage(torso.img, 0, 0);
+    return { img: c, cells: occupancy(c) };
+  };
+  return { torso, left, right, gusL: strip(-1), gusR: strip(1) };
+}
+// 透明な升目は描かない（高速化）
+function occupancy(img) {
+  const g = img.getContext('2d', { willReadFrequently: true }), d = g.getImageData(0, 0, img.width, img.height).data;
+  const occ = [];
+  for (let j = 0; j < GY; j++) for (let i = 0; i < GX; i++) {
+    const x0 = Math.floor(i * GW / GX), x1 = Math.floor((i + 1) * GW / GX), y0 = Math.floor(j * GH / GY), y1 = Math.floor((j + 1) * GH / GY);
+    let any = false;
+    for (let y = y0; y < y1 && !any; y += 4) for (let x = x0; x < x1; x += 4) if (d[(y * img.width + x) * 4 + 3] > 8) { any = true; break; }
+    occ.push(any);
+  }
+  return occ;
+}
+const SAMPLES = [
+  { id: 'sweater', name: '青いセーター（白い曲線柄）', desc: 'blue knit sweater with white wavy line pattern', type: 'sweater', color: '#2f5fa8', texture: 'knit', rib: true, long: true, deg: 36 },
+  { id: 'hoodie', name: '黒いフーディー', desc: 'black pullover hoodie with drawstrings', type: 'hoodie', color: '#1d1d21', texture: 'fleece', rib: true, long: true, deg: 36 },
+  { id: 'turtle', name: 'クリームのタートルネック', desc: 'cream knit turtleneck sweater', type: 'turtle', color: '#ece0c4', texture: 'knit', rib: true, long: true, deg: 36 },
+  { id: 'shirt', name: '水色のボタンダウンシャツ', desc: 'light blue button-down oxford shirt', type: 'shirt', color: '#a3d2ec', texture: 'weave', rib: false, long: true, deg: 36 },
 ];
-
-function setGarment(img, btn) {
-  garment = img;
-  document.querySelectorAll('.item').forEach(b => b.classList.remove('on'));
-  if (btn) btn.classList.add('on');
+for (const s of SAMPLES) {
+  const spec = { ...s, dirL: dirFromDeg(s.deg, -1), dirR: dirFromDeg(s.deg, 1), sleeveLen: s.long ? 430 : 130 };
+  // 一覧の写真は袖を自然に下ろした形で別に作る
+  const shotSpec = { ...spec, dirL: dirFromDeg(14, -1), dirR: dirFromDeg(14, 1), sleeveIn: 30 };
+  addItem({ id: s.id, name: s.name, desc: s.desc, img: makeSample(spec), backImg: makeSample({ ...spec, back: true }),
+    thumb: productShot(makeSample(shotSpec)),
+    rig: { ...BASE, dirL: spec.dirL, dirR: spec.dirR, upper: 220, fore: s.long ? 210 : 0, len: spec.sleeveLen } });
+}
+function select(id) {
+  const d = items.get(id); if (!d) return;
+  item = d;
+  list.querySelectorAll('.prod').forEach(el => el.classList.toggle('on', el.dataset.id === id));
+  if (window.dkApply) window.dkApply();   // AIライブ中なら、その服に着替える
 }
 
-function thumbFrom(src) {
-  const t = document.createElement('canvas');
-  t.width = 60; t.height = 60;
-  t.getContext('2d').drawImage(src, 0, 0, 60, 60);
-  t.style.width = '100%'; t.style.height = '100%';
-  return t;
+// ===== 商品のドラッグ／タップ =====
+let press = null, ghost = null;
+list.addEventListener('pointerdown', e => {
+  const el = e.target.closest('.prod'); if (!el) return;
+  press = { id: el.dataset.id, x: e.clientX, y: e.clientY, moved: false };
+  el.setPointerCapture(e.pointerId);
+});
+list.addEventListener('pointermove', e => {
+  if (!press) return;
+  if (!press.moved && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 8) {
+    press.moved = true;
+    ghost = new Image(); ghost.id = 'ghost'; ghost.src = items.get(press.id).thumb.toDataURL('image/jpeg', 0.85);
+    document.body.append(ghost);
+  }
+  if (ghost) { ghost.style.left = e.clientX + 'px'; ghost.style.top = e.clientY + 'px'; main.classList.toggle('over', inStage(e)); }
+});
+const inStage = e => { const r = stage.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
+function endPress(e) {
+  if (!press) return;
+  if (!press.moved || inStage(e)) select(press.id);
+  if (ghost) { ghost.remove(); ghost = null; }
+  main.classList.remove('over'); press = null;
 }
+list.addEventListener('pointerup', endPress);
+list.addEventListener('pointercancel', endPress);
 
-const thumbs = document.getElementById('thumbs');
-presets.forEach((p, i) => {
-  const b = document.createElement('button');
-  b.className = 'item';
-  b.appendChild(thumbFrom(p.img));
-  b.onclick = () => setGarment(p.img, b);
-  thumbs.appendChild(b);
-  if (i === 0) setGarment(p.img, b);
+// ================================================================
+//  アップロード：背景を消す → 平置きの服として胴と袖を見つける
+// ================================================================
+let lastUpload = null;
+function removeBackground(bmp, tol) {
+  const MAX = 1000, k0 = Math.min(1, MAX / Math.max(bmp.width, bmp.height));
+  const w = Math.round(bmp.width * k0), h = Math.round(bmp.height * k0);
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(bmp, 0, 0, w, h);
+  const d = g.getImageData(0, 0, w, h), p = d.data;
+  let r = 0, gg = 0, b = 0, n = 0, clear = 0;
+  const edge = (x, y) => { const i = (y * w + x) * 4; if (p[i + 3] < 20) { clear++; return; } r += p[i]; gg += p[i + 1]; b += p[i + 2]; n++; };
+  for (let x = 0; x < w; x += 2) { edge(x, 0); edge(x, h - 1); }
+  for (let y = 0; y < h; y += 2) { edge(0, y); edge(w - 1, y); }
+  if (n === 0 || clear > n) return c;           // すでに透過済み
+  r /= n; gg /= n; b /= n;
+  const seen = new Uint8Array(w * h), stack = [];
+  const near = i => Math.hypot(p[i] - r, p[i + 1] - gg, p[i + 2] - b);
+  const push = (x, y) => { const j = y * w + x; if (seen[j]) return; seen[j] = 1; if (near(j * 4) < tol) stack.push(j); };
+  for (let x = 0; x < w; x++) { push(x, 0); push(x, h - 1); }
+  for (let y = 0; y < h; y++) { push(0, y); push(w - 1, y); }
+  while (stack.length) {
+    const j = stack.pop(), x = j % w, y = (j / w) | 0; p[j * 4 + 3] = 0;
+    if (x > 0) push(x - 1, y); if (x < w - 1) push(x + 1, y); if (y > 0) push(x, y - 1); if (y < h - 1) push(x, y + 1);
+  }
+  for (let j = 0; j < w * h; j++) {
+    if (p[j * 4 + 3] === 0) continue;
+    const x = j % w, y = (j / w) | 0;
+    const nb = (x > 0 && p[(j - 1) * 4 + 3] === 0) || (x < w - 1 && p[(j + 1) * 4 + 3] === 0) || (y > 0 && p[(j - w) * 4 + 3] === 0) || (y < h - 1 && p[(j + w) * 4 + 3] === 0);
+    if (nb) p[j * 4 + 3] = Math.round(255 * Math.min(1, Math.max(.25, near(j * 4) / (tol * 2))));
+  }
+  g.putImageData(d, 0, 0); return c;
+}
+function buildUploaded(src) {
+  const w = src.width, h = src.height;
+  const d = src.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
+  const A = (x, y) => d[(y * w + x) * 4 + 3] > 40;
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (A(x, y)) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  if (x1 < 0) { x0 = 0; y0 = 0; x1 = w - 1; y1 = h - 1; }
+  const bh = y1 - y0 + 1, cx = (x0 + x1) / 2;
+  // 胴の幅：下から25%の高さで、中央を含むひと続きの部分
+  // 胴の幅：下半分の各行で「中央を含むひと続き」の幅を測り、一番細い所を胴とする（袖が胴に触れていても数えない）
+  let torsoW = Infinity, l = 0, rr = 0;
+  for (let f = 0.5; f <= 0.92; f += 0.03) {
+    const ry = Math.round(y0 + bh * f);
+    let a1 = Math.round(cx), b1 = Math.round(cx);
+    if (!A(a1, ry)) continue;
+    while (a1 > x0 && A(a1 - 1, ry)) a1--;
+    while (b1 < x1 && A(b1 + 1, ry)) b1++;
+    if (b1 - a1 + 1 < torsoW) { torsoW = b1 - a1 + 1; l = a1; rr = b1; }
+  }
+  if (!isFinite(torsoW) || torsoW < (x1 - x0) * 0.3) { torsoW = (x1 - x0) * 0.55; l = cx - torsoW / 2; rr = cx + torsoW / 2; }
+  const torsoCx = (l + rr) / 2;
+  // 胴の幅が 230（論理）になるよう拡大し、胴の中心を x=400、上端を y=50 に置く
+  const k = 230 / torsoW;
+  const out = document.createElement('canvas'); out.width = GW; out.height = GH;
+  const og = out.getContext('2d');
+  og.setTransform(k * GS, 0, 0, k * GS, (400 - torsoCx * k) * GS, (50 - y0 * k) * GS);
+  og.drawImage(src, 0, 0);
+  og.setTransform(1, 0, 0, 1, 0, 0);
+  // 袖の向きと長さを、胴の外側にある部分から推定
+  const od = og.getImageData(0, 0, GW, GH).data;
+  const rig = { ...BASE, upper: 220, fore: 0 };
+  for (const side of [-1, 1]) {
+    const S = side < 0 ? BASE.LS : BASE.RS;
+    let sx = 0, sy = 0, cnt = 0, far = 0; const pts = [];
+    for (let y = 60; y < LH_; y += 4) for (let x = 0; x < LW; x += 4) {
+      const outside = side < 0 ? x < 250 : x > 550;
+      if (!outside) continue;
+      if (od[((y * GS) * GW + x * GS) * 4 + 3] > 40) { sx += x; sy += y; cnt++; pts.push([x, y]); }
+    }
+    let dir = dirFromDeg(40, side);
+    if (cnt > 20) dir = V.norm({ x: sx / cnt - S.x, y: sy / cnt - S.y });
+    for (const [x, y] of pts) far = Math.max(far, (x - S.x) * dir.x + (y - S.y) * dir.y);
+    if (side < 0) rig.dirL = dir; else rig.dirR = dir;
+    if (far > 300) rig.fore = Math.max(rig.fore, far - 220);
+    rig.len = Math.max(rig.len || 0, far);
+  }
+  return { img: out, rig };
+}
+async function makeUpload(bmp) {
+  let src;
+  if ($('autoBg').checked) src = removeBackground(bmp, +$('tol').value);
+  else { src = document.createElement('canvas'); src.width = bmp.width; src.height = bmp.height; src.getContext('2d').drawImage(bmp, 0, 0); }
+  const r = buildUploaded(src); r.thumb = productShot(src); return r;
+}
+$('file').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const bmp = await createImageBitmap(f);
+    const { img, rig, thumb } = await makeUpload(bmp);
+    const id = 'up' + Date.now();
+    addItem({ id, name: 'アップロード画像', desc: 'shirt', img, rig, thumb, srcFile: f });
+    lastUpload = { id, bmp }; select(id);
+    say('背景が残る・服が欠ける場合は「背景の消し具合」で調整してください。正面・平置き・単色背景の写真が一番きれいに合います');
+  } catch (err) { say('画像を読み込めませんでした。PNGかJPGを選んでください', true); }
 });
+async function redoUpload() {
+  if (!lastUpload) return;
+  const d = items.get(lastUpload.id); if (!d) return;
+  const { img, rig, thumb } = await makeUpload(lastUpload.bmp);
+  d.img = img; d.rig = rig; d.thumb = thumb; d.parts = d.backParts = splitGarment(img, rig); d._under = null;
+  const el = list.querySelector(`[data-id="${lastUpload.id}"] img`); if (el) el.src = thumb.toDataURL('image/jpeg', 0.9);
+}
+$('tol').addEventListener('change', redoUpload);
+$('autoBg').addEventListener('change', redoUpload);
 
-document.getElementById('file').addEventListener('change', async e => {
-  const f = e.target.files[0];
-  e.target.value = '';
-  if (!f) return;
-  const bmp = await createImageBitmap(f);
-  const c = document.createElement('canvas');
-  c.width = GW; c.height = GH;
-  const k = Math.min(GW / bmp.width, GH / bmp.height);
-  const w = bmp.width * k, h = bmp.height * k;
-  c.getContext('2d').drawImage(bmp, (GW - w) / 2, 0, w, h);
-  const b = document.createElement('button');
-  b.className = 'item';
-  b.appendChild(thumbFrom(c));
-  b.onclick = () => setGarment(c, b);
-  thumbs.appendChild(b);
-  setGarment(c, b);
+// ===== 服の位置・大きさの手動調整 =====
+const ptrs = new Map(); let drag = null, pinch = null;
+const d2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+function startDrag() { const [p] = ptrs.values(); drag = { x: p.x, y: p.y, ox: offset.x, oy: offset.y }; }
+cv.addEventListener('pointerdown', e => {
+  if (!camOn || !item) return;
+  cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (ptrs.size === 1) startDrag();
+  if (ptrs.size === 2) { const [a, b] = ptrs.values(); pinch = { d0: d2(a, b), s0: +sizeEl.value }; drag = null; }
 });
+cv.addEventListener('pointermove', e => {
+  if (!ptrs.has(e.pointerId)) return;
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && ptrs.size === 2) { const [a, b] = ptrs.values(); sizeEl.value = Math.round(Math.min(150, Math.max(70, pinch.s0 * d2(a, b) / pinch.d0))); }
+  else if (drag) { offset.x = drag.ox + (e.clientX - drag.x); offset.y = drag.oy + (e.clientY - drag.y); }
+});
+function endPtr(e) { ptrs.delete(e.pointerId); pinch = null; if (ptrs.size === 1) startDrag(); else drag = null; }
+cv.addEventListener('pointerup', endPtr); cv.addEventListener('pointercancel', endPtr);
+$('resetBtn').onclick = () => { offset = { x: 0, y: 0 }; sizeEl.value = 100; };
+$('offBtn').onclick = () => { item = null; list.querySelectorAll('.prod').forEach(el => el.classList.remove('on')); };
 
+// ================================================================
+//  カメラ・姿勢・体の輪郭
+// ================================================================
 function fit() {
-  const r = stage.getBoundingClientRect();
-  const w = Math.round(r.width), h = Math.round(r.height);
-  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  const r = stage.getBoundingClientRect(), w = Math.round(r.width), h = Math.round(r.height);
+  for (const c of [cv, layer]) if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+  const hw = Math.ceil(w / 2), hh = Math.ceil(h / 2);
+  if (shadeC.width !== hw || shadeC.height !== hh) { shadeC.width = hw; shadeC.height = hh; }
 }
-
-function drawVideo() {
+function drawVideoTo(g, filter) {
   const W = cv.width, H = cv.height;
-  const vw = video.videoWidth, vh = video.videoHeight;
-  const k = Math.max(W / vw, H / vh);
+  g.save(); g.translate(W, 0); g.scale(-1, 1);
+  if (filter && FILTER_OK) g.filter = filter;
+  g.drawImage(video, geo.dx, geo.dy, geo.dw, geo.dh); g.restore();
+}
+function updateGeo() {
+  const W = cv.width, H = cv.height, vw = video.videoWidth, vh = video.videoHeight, k = Math.max(W / vw, H / vh);
   geo = { dw: vw * k, dh: vh * k, dx: (W - vw * k) / 2, dy: (H - vh * k) / 2 };
-  ctx.save();
-  ctx.translate(W, 0); ctx.scale(-1, 1);
-  ctx.drawImage(video, geo.dx, geo.dy, geo.dw, geo.dh);
-  ctx.restore();
 }
+const toScreen = lm => ({ x: cv.width - (lm.x * geo.dw + geo.dx), y: lm.y * geo.dh + geo.dy, ok: (lm.visibility ?? 1) >= VIS });
 
-function toScreen(lm) {
-  return { x: cv.width - (lm.x * geo.dw + geo.dx), y: lm.y * geo.dh + geo.dy };
-}
-
-function computeTarget() {
-  if (!pose || !pose[11] || !pose[12]) return null;
-  if ((pose[11].visibility ?? 1) < VIS_MIN || (pose[12].visibility ?? 1) < VIS_MIN) return null;
-  const P1 = toScreen(pose[11]), P2 = toScreen(pose[12]);
-  const [A, B] = P1.x < P2.x ? [P1, P2] : [P2, P1];
-  const dist = Math.hypot(B.x - A.x, B.y - A.y);
-  if (dist < 10) return null;
+function bodyFromPose() {
+  if (!pose) return null;
+  const P = i => pose[i] ? toScreen(pose[i]) : null;
+  const s1 = P(11), s2 = P(12);
+  if (!s1 || !s2 || !s1.ok || !s2.ok) return null;
+  let a = { s: s1, h: P(23), e: P(13), w: P(15), hand: [P(15), P(17), P(19), P(21)] };
+  let b = { s: s2, h: P(24), e: P(14), w: P(16), hand: [P(16), P(18), P(20), P(22)] };
+  const aIs11 = a.s.x <= b.s.x;
+  if (!aIs11) [a, b] = [b, a];
+  const sw = d2(a.s, b.s); if (sw < 10) return null;
+  const u = V.norm(V.sub(b.s, a.s)), n = { x: -u.y, y: u.x };
+  const mid = V.lerp(a.s, b.s, .5);
+  const guessHip = sgn => V.add(mid, V.add(V.mul(n, sw * 1.35), V.mul(u, sgn * sw * 0.36)));
+  const hipsOk = a.h && b.h && a.h.ok && b.h.ok;
+  if (hipsOk) {
+    const torsoLen = d2(mid, V.lerp(a.h, b.h, .5)), minSw = torsoLen * 0.55;
+    if (sw < minSw) {   // 横を向いている：肩幅を広げて服が細い線にならないようにする
+      const e = (minSw - sw) / 2;
+      a.s = { ...a.s, x: a.s.x - u.x * e, y: a.s.y - u.y * e }; b.s = { ...b.s, x: b.s.x + u.x * e, y: b.s.y + u.y * e };
+      a.h = { ...a.h, x: a.h.x - u.x * e * 0.7, y: a.h.y - u.y * e * 0.7 }; b.h = { ...b.h, x: b.h.x + u.x * e * 0.7, y: b.h.y + u.y * e * 0.7 };
+    }
+  }
+  const ok = p => p && p.ok ? p : null;
+  const handC = arr => { const v = arr.filter(p => p && p.ok); if (v.length < 2) return null; return { x: v.reduce((s, p) => s + p.x, 0) / v.length, y: v.reduce((s, p) => s + p.y, 0) / v.length }; };
+  // 体の向き：左右の肩の奥行き(z)の差から推定
+  const zA = pose[aIs11 ? 11 : 12].z ?? 0, zB = pose[aIs11 ? 12 : 11].z ?? 0;
+  // 背中向き：左右の肩の並びが逆になり、顔（鼻・目）が見えなくなる
+  const vis = i => pose[i] ? (pose[i].visibility ?? 1) : 0;
+  const faceVis = Math.max(vis(0), vis(2), vis(5));
+  const rawBack = (!aIs11 && faceVis < 0.6) || faceVis < 0.12;
+  backScore = Math.max(0, Math.min(8, backScore + (rawBack ? 1 : -1)));
+  if (backScore >= 5) facingBack = true; else if (backScore <= 2) facingBack = false;
+  // yaw>0：画面右の肩が奥（遠い）→ 右側を縮める
+  const yaw = Math.max(-0.6, Math.min(0.6, (zB - zA) * 1.6));
+  // 顔（服が顎にかからないよう、この範囲は服を消す）
+  const nose = P(0), e1 = P(7), e2 = P(8);
+  const face = nose && e1 && e2 && nose.ok ? { x: nose.x, y: nose.y, r: Math.max(d2(e1, e2), sw * 0.3) } : null;
   return {
-    x: (A.x + B.x) / 2,
-    y: (A.y + B.y) / 2,
-    s: dist / SHOULDER_W,
-    rot: Math.atan2(B.y - A.y, B.x - A.x),
+    SL: a.s, SR: b.s, HL: hipsOk ? a.h : guessHip(-1), HR: hipsOk ? b.h : guessHip(1),
+    EL: ok(a.e), ER: ok(b.e), WL: ok(a.w), WR: ok(b.w), KL: handC(a.hand), KR: handC(b.hand),
+    FC: face, yaw,
   };
 }
-
-function drawGarment() {
-  if (!garment) return;
-  const scaleK = sizeEl.value / 100;
-  let g;
-  if (smooth) {
-    g = { x: smooth.x + offset.x, y: smooth.y + offset.y, s: smooth.s * scaleK, rot: smooth.rot };
-  } else {
-    const base = cv.width * 0.5 / SHOULDER_W;
-    g = { x: cv.width / 2 + offset.x, y: cv.height * 0.4 + offset.y, s: base * scaleK, rot: 0 };
+function fallbackBody() {
+  const W = cv.width, H = cv.height, sw = Math.min(W, H) * 0.26, cx = W / 2, cy = H * 0.34;
+  return {
+    SL: { x: cx - sw / 2, y: cy }, SR: { x: cx + sw / 2, y: cy },
+    HL: { x: cx - sw * 0.36, y: cy + sw * 1.35 }, HR: { x: cx + sw * 0.36, y: cy + sw * 1.35 },
+    EL: null, ER: null, WL: null, WR: null, KL: null, KR: null,
+  };
+}
+// One Euro フィルタ：止まっている時は震えを強く抑え、速く動いた時は遅れを減らす
+class OneEuro {
+  constructor(minCut = 1.2, beta = 0.02, dCut = 1.0) { this.minCut = minCut; this.beta = beta; this.dCut = dCut; this.x = null; this.dx = 0; this.t = 0; }
+  static a(cut, dt) { const r = 2 * Math.PI * cut * dt; return r / (r + 1); }
+  f(v, t) {
+    if (this.x === null) { this.x = v; this.t = t; return v; }
+    const dt = Math.max(1e-3, (t - this.t) / 1000); this.t = t;
+    const dv = (v - this.x) / dt;
+    this.dx += OneEuro.a(this.dCut, dt) * (dv - this.dx);
+    const cut = this.minCut + this.beta * Math.abs(this.dx);
+    this.x += OneEuro.a(cut, dt) * (v - this.x);
+    return this.x;
   }
-  ctx.save();
-  ctx.translate(g.x, g.y);
-  ctx.rotate(g.rot);
-  ctx.scale(g.s / GS, g.s / GS);
-  ctx.drawImage(garment, -ANCHOR.x * GS, -ANCHOR.y * GS, GW, GH);
+}
+const filters = new Map();
+function smoothBody(b) {
+  const t = performance.now();
+  if (!sm) sm = {};
+  for (const k of Object.keys(b)) {
+    const v = b[k];
+    if (v === null || v === undefined) { sm[k] = null; for (const c of ['x', 'y', 'r']) filters.delete(k + c); continue; }
+    if (typeof v === 'number') { const f = filters.get(k) || filters.set(k, new OneEuro(0.8, 0.5)).get(k); sm[k] = f.f(v, t); continue; }
+    const o = {};
+    for (const c of ['x', 'y', 'r']) {
+      if (v[c] === undefined) continue;
+      const f = filters.get(k + c) || filters.set(k + c, new OneEuro()).get(k + c);
+      o[c] = f.f(v[c], t);
+    }
+    sm[k] = o;
+  }
+}
+function adjust(b) {
+  const k = sizeEl.value / 100 * 1.08;   // 肩の関節より少し外側に服の肩線が来る
+  const m = V.lerp(b.SL, b.SR, .5), o = {};
+  for (const key of Object.keys(b)) {
+    const p = b[key];
+    if (typeof p === 'number' || !p) { o[key] = p ?? null; continue; }
+    const kk = (key[0] === 'K' || key === 'FC') ? 1 : k, off = key === 'FC' || key[0] === 'K' ? { x: 0, y: 0 } : offset;
+    o[key] = { ...p, x: m.x + (p.x - m.x) * kk + off.x, y: m.y + (p.y - m.y) * kk + off.y };
+  }
+  return o;
+}
+// 体の輪郭マスク（MediaPipeの人物セグメンテーション）
+function updateMask(r) {
+  hasMask = false;
+  const m = r.segmentationMasks && r.segmentationMasks[0];
+  if (!m) return;
+  try {
+    const f = m.getAsFloat32Array(), mw = m.width, mh = m.height, S = 3;
+    const w = Math.ceil(mw / S), h = Math.ceil(mh / S);
+    if (maskC.width !== w || maskC.height !== h) { maskC.width = w; maskC.height = h; }
+    const img = mctx.createImageData(w, h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const v = f[(y * S) * mw + x * S];
+      const a = Math.max(0, Math.min(1, (v - 0.25) * 4));
+      img.data[(y * w + x) * 4 + 3] = a * 255;
+    }
+    mctx.putImageData(img, 0, 0);
+    hasMask = true;
+  } catch (e) { hasMask = false; }
+}
+
+// ================================================================
+//  変形（スキニング）：胴は肩〜腰、袖は肩→ひじ→手首に沿って曲げる
+// ================================================================
+// 体を円柱とみなして横方向を曲げる（体の向き yaw に合わせて、遠い側を縮め近い側を広げる）
+const TH = Math.PI * 0.42;
+const fitW = () => +($('fitStyle') ? $('fitStyle').value : 1.12);
+function cyl(u, yaw) {
+  if (u <= 0 || u >= 1) return u;
+  const s = a => Math.sin(a + yaw), lo = s(-TH), hi = s(TH);
+  if (Math.abs(hi - lo) < 1e-3) return u;
+  const f = (s((u - 0.5) * 2 * TH) - lo) / (hi - lo);
+  return u + (f - u) * 0.65;
+}
+function torsoMap(rig, b, p) {
+  const yaw = b.yaw || 0, fw = fitW();
+  const u = cyl(0.5 + ((p.x - rig.LS.x) / (rig.RS.x - rig.LS.x) - 0.5) * fw, yaw);
+  const uh = cyl(0.5 + ((p.x - rig.LH.x) / (rig.RH.x - rig.LH.x) - 0.5) * fw, yaw);
+  const v = (p.y - rig.LS.y) / (rig.LH.y - rig.LS.y);
+  const top = V.lerp(b.SL, b.SR, u);
+  let bot = V.lerp(b.HL, b.HR, uh);
+  // 裾は少し遅れて付いてくる（布の揺れ）
+  if (b.HLs && b.HRs) bot = V.lerp(bot, V.lerp(b.HLs, b.HRs, uh), smoothstep(0.55, 1.1, v));
+  return V.lerp(top, bot, v);
+}
+function armMap(rig, b, p, side) {
+  const S0 = side < 0 ? rig.LS : rig.RS, d0 = side < 0 ? rig.dirL : rig.dirR;
+  const U0 = rig.upper, F0 = rig.fore;
+  const rel = V.sub(p, S0), t = rel.x * d0.x + rel.y * d0.y, nn = d0.x * rel.y - d0.y * rel.x;
+  // 袖の付け根は「胴の肩線」に合わせる（シルエットで胴を広げても袖が離れない）
+  const Sj = side < 0 ? b.SL : b.SR, S = torsoMap(rig, b, S0), shift = V.sub(S, Sj);
+  const k = d2(b.SL, b.SR) / REST_SW;
+  const torsoRot = Math.atan2(b.SR.y - b.SL.y, b.SR.x - b.SL.x);
+  let E = side < 0 ? b.EL : b.ER, W = side < 0 ? b.WL : b.WR;
+  if (E) E = V.add(E, V.mul(shift, 0.5));
+  if (W) W = V.add(W, V.mul(shift, 0.3));
+  if (!E) E = V.add(S, V.mul(V.rot(d0, torsoRot), U0 * k));
+  const dirU = V.norm(V.sub(E, S)), lenU = Math.max(V.len(V.sub(E, S)), U0 * k * 0.35);
+  const perpU = { x: -dirU.y, y: dirU.x };
+  const kw = k * fitW();
+  const pu = V.add(S, V.add(V.mul(dirU, t * lenU / U0), V.mul(perpU, nn * kw)));
+  if (F0 <= 0) return pu;
+  if (!W) W = V.add(E, V.mul(dirU, F0 * lenU / U0));
+  const dirF = V.norm(V.sub(W, E)), lenF = Math.max(V.len(V.sub(W, E)), F0 * k * 0.35);
+  const perpF = { x: -dirF.y, y: dirF.x };
+  const pf = V.add(E, V.add(V.mul(dirF, (t - U0) * lenF / F0), V.mul(perpF, nn * kw)));
+  return V.lerp(pu, pf, smoothstep(U0 - 30, U0 + 30, t));
+}
+function sideLineX(rig, y, side) {
+  const S = side < 0 ? rig.LS : rig.RS, A = side < 0 ? rig.LA : rig.RA, H = side < 0 ? rig.LB : rig.RB;
+  if (y <= S.y) return S.x;
+  if (y <= A.y) return S.x + (A.x - S.x) * (y - S.y) / (A.y - S.y);
+  return A.x + (H.x - A.x) * (y - A.y) / (H.y - A.y);
+}
+// 袖：肩の付け根は胴と同じ動き、腕の方へ行くほど腕の動きに切り替える
+function sleeveMap(rig, b, p, side) {
+  const S0 = side < 0 ? rig.LS : rig.RS, d0 = side < 0 ? rig.dirL : rig.dirR;
+  const t = (p.x - S0.x) * d0.x + (p.y - S0.y) * d0.y;
+  // 袖ぐりの縫い目のそばは胴と一緒に動かす（腕を上げても脇に隙間が出ないよう、間の布が伸びる）
+  const out = side < 0 ? sideLineX(rig, p.y, -1) - p.x : p.x - sideLineX(rig, p.y, 1);
+  const w = smoothstep(-10, 55, t) * smoothstep(-6, 42, out);
+  return V.lerp(torsoMap(rig, b, p), armMap(rig, b, p, side), w);
+}
+function drawTri(g, img, s0, s1, s2, d0, d1, dd2) {
+  const den = s0.x * (s1.y - s2.y) + s1.x * (s2.y - s0.y) + s2.x * (s0.y - s1.y);
+  if (Math.abs(den) < 1e-6) return;
+  const a = (d0.x * (s1.y - s2.y) + d1.x * (s2.y - s0.y) + dd2.x * (s0.y - s1.y)) / den;
+  const c = (d0.x * (s2.x - s1.x) + d1.x * (s0.x - s2.x) + dd2.x * (s1.x - s0.x)) / den;
+  const e = (d0.x * (s1.x * s2.y - s2.x * s1.y) + d1.x * (s2.x * s0.y - s0.x * s2.y) + dd2.x * (s0.x * s1.y - s1.x * s0.y)) / den;
+  const bb = (d0.y * (s1.y - s2.y) + d1.y * (s2.y - s0.y) + dd2.y * (s0.y - s1.y)) / den;
+  const dd = (d0.y * (s2.x - s1.x) + d1.y * (s0.x - s2.x) + dd2.y * (s1.x - s0.x)) / den;
+  const f = (d0.y * (s1.x * s2.y - s2.x * s1.y) + d1.y * (s2.x * s0.y - s0.x * s2.y) + dd2.y * (s0.x * s1.y - s1.x * s0.y)) / den;
+  const cx = (d0.x + d1.x + dd2.x) / 3, cy = (d0.y + d1.y + dd2.y) / 3;
+  const grow = p => { const dx = p.x - cx, dy = p.y - cy, L = Math.hypot(dx, dy) || 1; return { x: p.x + dx / L, y: p.y + dy / L }; };
+  const g0 = grow(d0), g1 = grow(d1), g2 = grow(dd2);
+  const sx = Math.max(0, Math.min(s0.x, s1.x, s2.x) - 2), sy = Math.max(0, Math.min(s0.y, s1.y, s2.y) - 2);
+  const sw = Math.min(img.width, Math.max(s0.x, s1.x, s2.x) + 2) - sx, sh = Math.min(img.height, Math.max(s0.y, s1.y, s2.y) + 2) - sy;
+  if (sw <= 0 || sh <= 0) return;
+  g.save();
+  g.beginPath(); g.moveTo(g0.x, g0.y); g.lineTo(g1.x, g1.y); g.lineTo(g2.x, g2.y); g.closePath(); g.clip();
+  g.transform(a, bb, c, dd, e, f);
+  g.drawImage(img, sx, sy, sw, sh, sx, sy, sw, sh);
+  g.restore();
+}
+function gussetMap(r, b, p, side) {
+  const xs = sideLineX(r, p.y, side), inward = side < 0 ? p.x - xs : xs - p.x;   // 脇の線から内側への距離
+  const o = 1 - Math.min(1, Math.max(0, inward / 70));                          // 脇の線で1、内側で0
+  const A = side < 0 ? r.LA : r.RA, dir = side < 0 ? r.dirL : r.dirR;
+  const v = (p.y - (A.y - 40)) / 300, fall = 1 - smoothstep(0.35, 1, v);       // 脇の下ほど強く引っ張る
+  const tt = Math.max(0, p.y - A.y + 40) * 0.9;
+  const target = sleeveMap(r, b, { x: A.x + dir.x * tt - side * 4, y: A.y + dir.y * tt }, side);
+  return V.lerp(torsoMap(r, b, p), target, o * fall * 0.95);
+}
+function drawPart(g, part, map) {
+  const pts = [];
+  for (let j = 0; j <= GY; j++) {
+    const row = [];
+    for (let i = 0; i <= GX; i++) {
+      const p = { x: LW * i / GX, y: LH_ * j / GY };
+      row.push({ s: { x: p.x * GS, y: p.y * GS }, d: map(p) });
+    }
+    pts.push(row);
+  }
+  for (let j = 0; j < GY; j++) for (let i = 0; i < GX; i++) {
+    if (!part.cells[j * GX + i]) continue;
+    const p00 = pts[j][i], p10 = pts[j][i + 1], p01 = pts[j + 1][i], p11 = pts[j + 1][i + 1];
+    drawTri(g, part.img, p00.s, p10.s, p11.s, p00.d, p10.d, p11.d);
+    drawTri(g, part.img, p00.s, p11.s, p01.s, p00.d, p11.d, p01.d);
+  }
+}
+function drawGarmentMesh(g, it, b) {
+  const r = it.rig;
+  const P = facingBack ? it.backParts : it.parts;
+  const L = [P.left, p => sleeveMap(r, b, p, -1)], Rr = [P.right, p => sleeveMap(r, b, p, 1)], T = [P.torso, p => torsoMap(r, b, p)];
+  const gus = [[P.gusL, p => gussetMap(r, b, p, -1)], [P.gusR, p => gussetMap(r, b, p, 1)]].filter(x => x[0]);
+  // 横を向いている時は、奥側の袖を体の後ろに描く
+  const yaw = b.yaw || 0;
+  const maps = yaw > 0.3 ? [...gus, Rr, T, L] : yaw < -0.3 ? [...gus, L, T, Rr] : [...gus, T, L, Rr];
+  if (GL.ok()) {
+    GL.begin(g.canvas.width, g.canvas.height);
+    for (const [part, map] of maps) GL.drawPart(part, map);
+    g.drawImage(GL.canvas, 0, 0);
+    return;
+  }
+  for (const [part, map] of maps) drawPart(g, part, map);   // WebGLが使えない時の予備
+}
+// ===== GPU（WebGL）で、変形した服の三角形をまとめて描く =====
+const GL = (() => {
+  const canvas = document.createElement('canvas');
+  let gl = null, prog, aPos, aUV, uRes, bufP, bufU, failed = false;
+  function init() {
+    if (gl || failed) return !!gl;
+    try {
+      gl = canvas.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: true, preserveDrawingBuffer: true });
+      if (!gl) throw new Error('no webgl');
+      const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+      prog = gl.createProgram();
+      gl.attachShader(prog, sh(gl.VERTEX_SHADER, 'attribute vec2 p;attribute vec2 t;uniform vec2 r;varying vec2 v;void main(){v=t;vec2 c=p/r*2.0-1.0;gl_Position=vec4(c.x,-c.y,0,1);}'));
+      gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, 'precision mediump float;varying vec2 v;uniform sampler2D s;void main(){gl_FragColor=texture2D(s,v);}'));
+      gl.linkProgram(prog); if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error('link');
+      aPos = gl.getAttribLocation(prog, 'p'); aUV = gl.getAttribLocation(prog, 't'); uRes = gl.getUniformLocation(prog, 'r');
+      bufP = gl.createBuffer(); bufU = gl.createBuffer();
+      gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      return true;
+    } catch (e) { failed = true; gl = null; return false; }
+  }
+  function tex(part) {
+    if (part.tex && part.texGL === gl) return part.tex;
+    const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, part.img);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    part.tex = t; part.texGL = gl; return t;
+  }
+  return {
+    canvas,
+    off: false,
+    ok() { return !this.off && init(); },
+    begin(w, h) {
+      if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+      gl.viewport(0, 0, w, h); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.useProgram(prog); gl.uniform2f(uRes, w, h);
+    },
+    drawPart(part, map) {
+      const P = new Float32Array((GX + 1) * (GY + 1) * 2);
+      for (let j = 0; j <= GY; j++) for (let i = 0; i <= GX; i++) {
+        const q = map({ x: LW * i / GX, y: LH_ * j / GY }), k = (j * (GX + 1) + i) * 2;
+        P[k] = q.x; P[k + 1] = q.y;
+      }
+      const pos = [], uv = [];
+      const put = (i, j) => { const k = (j * (GX + 1) + i) * 2; pos.push(P[k], P[k + 1]); uv.push(i / GX, j / GY); };
+      for (let j = 0; j < GY; j++) for (let i = 0; i < GX; i++) {
+        if (!part.cells[j * GX + i]) continue;
+        put(i, j); put(i + 1, j); put(i + 1, j + 1); put(i, j); put(i + 1, j + 1); put(i, j + 1);
+      }
+      if (!pos.length) return;
+      gl.bindTexture(gl.TEXTURE_2D, tex(part));
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufP); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pos), gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufU); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(uv), gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(aUV); gl.vertexAttribPointer(aUV, 2, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, pos.length / 2);
+    },
+  };
+})();
+function drawBones(b) {
+  ctx.save(); ctx.strokeStyle = '#0f0'; ctx.fillStyle = '#0f0'; ctx.lineWidth = 2;
+  const L = (p, q) => { if (p && q) { ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke(); } };
+  L(b.SL, b.SR); L(b.SL, b.HL); L(b.SR, b.HR); L(b.HL, b.HR); L(b.SL, b.EL); L(b.EL, b.WL); L(b.SR, b.ER); L(b.ER, b.WR);
+  for (const p of Object.values(b)) if (p && typeof p === 'object') { ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, 7); ctx.fill(); }
   ctx.restore();
 }
-
-function updateSmooth(t) {
-  if (!t) return;
-  const a = 0.45;
-  if (!smooth) { smooth = { ...t }; return; }
-  for (const k of ['x', 'y', 's', 'rot']) smooth[k] += (t[k] - smooth[k]) * a;
+// 体の丸みと向きの陰影（体の端と、遠い側を暗く）
+function bodyShading(g, b) {
+  const yaw = b.yaw || 0, sw = d2(b.SL, b.SR);
+  const u = V.norm(V.sub(b.SR, b.SL)), m = V.lerp(V.lerp(b.SL, b.SR, .5), V.lerp(b.HL, b.HR, .5), .5);
+  const A = V.sub(m, V.mul(u, sw * 0.62)), B = V.add(m, V.mul(u, sw * 0.62));
+  const gr = g.createLinearGradient(A.x, A.y, B.x, B.y);
+  const L = 0.22 + Math.max(0, -yaw) * 0.45, R = 0.22 + Math.max(0, yaw) * 0.45;
+  gr.addColorStop(0, `rgba(0,0,0,${L})`); gr.addColorStop(0.28, 'rgba(0,0,0,0)');
+  gr.addColorStop(0.5 + yaw * 0.25, 'rgba(255,255,255,0.05)');
+  gr.addColorStop(0.72, 'rgba(0,0,0,0)'); gr.addColorStop(1, `rgba(0,0,0,${R})`);
+  g.save(); g.globalCompositeOperation = 'source-atop'; g.fillStyle = gr; g.fillRect(0, 0, g.canvas.width, g.canvas.height); g.restore();
+}
+function renderOutfit() {
+  if (!item) { if ($('showBones').checked && sm) drawBones(sm); return; }
+  const tracked = !!sm;
+  const b = adjust(sm || fallbackBody());
+  // 裾の揺れ（ばね）：腰の位置を少し遅れて追いかける
+  if (tracked) {
+    for (const k of ['HL', 'HR']) {
+      const s = hem[k] || (hem[k] = { x: b[k].x, y: b[k].y, vx: 0, vy: 0 });
+      s.vx = (s.vx + (b[k].x - s.x) * 0.22) * 0.72; s.vy = (s.vy + (b[k].y - s.y) * 0.22) * 0.72;
+      s.x += s.vx; s.y += s.vy;
+      const sw = d2(b.SL, b.SR), dx = s.x - b[k].x, dy = s.y - b[k].y, L = Math.hypot(dx, dy), max = sw * 0.12;
+      if (L > max) { s.x = b[k].x + dx / L * max; s.y = b[k].y + dy / L * max; }
+      b[k + 's'] = { x: s.x, y: s.y };
+    }
+  } else { hem.HL = hem.HR = null; }
+  const W = cv.width, H = cv.height;
+  // 1) 服を別のレイヤーに変形して描く
+  lctx.setTransform(1, 0, 0, 1, 0, 0); lctx.globalCompositeOperation = 'source-over'; lctx.globalAlpha = 1;
+  lctx.clearRect(0, 0, W, H);
+  drawGarmentMesh(lctx, item, b);
+  bodyShading(lctx, b);
+  matchLighting(lctx);
+  // 2) 本物のシワ・陰影：カメラ映像の明暗を服に移す（ソフトライト）
+  const shadeK = +$('shade').value / 100;
+  if (tracked && shadeK > 0) {
+    const hw = shadeC.width, hh = shadeC.height;   // 半分の解像度で計算（軽くする）
+    sctx.setTransform(1, 0, 0, 1, 0, 0); sctx.globalCompositeOperation = 'source-over'; sctx.globalAlpha = 1; sctx.clearRect(0, 0, hw, hh);
+    sctx.save(); sctx.scale(hw / W, hh / H); drawVideoTo(sctx, 'grayscale(1) blur(7px) contrast(1.25) brightness(1.12)'); sctx.restore();   // 柔らかいシワだけを拾い、柄や文字は拾わない
+    sctx.globalCompositeOperation = 'destination-in'; sctx.drawImage(layer, 0, 0, hw, hh);
+    lctx.globalCompositeOperation = 'soft-light'; lctx.globalAlpha = shadeK;
+    lctx.drawImage(shadeC, 0, 0, W, H);
+    lctx.globalCompositeOperation = 'source-over'; lctx.globalAlpha = 1;
+  }
+  // 3) 体の輪郭からはみ出した部分を消す（ピタッと密着させる）
+  if (tracked && hasMask && $('useMask').checked) {
+    lctx.save(); lctx.globalCompositeOperation = 'destination-in';
+    lctx.translate(W, 0); lctx.scale(-1, 1);
+    if (FILTER_OK) lctx.filter = 'blur(2px)';
+    lctx.drawImage(maskC, geo.dx, geo.dy, geo.dw, geo.dh);
+    lctx.restore();
+  }
+  // 4) 手を服の手前に出す（手のまわりだけカメラ映像を戻す）
+  if (tracked && $('hands').checked) {
+    const sw = d2(b.SL, b.SR);
+    for (const K of [sm.KL, sm.KR]) {
+      if (!K) continue;
+      lctx.save(); lctx.globalCompositeOperation = 'destination-out';
+      const gr = lctx.createRadialGradient(K.x, K.y, sw * 0.08, K.x, K.y, sw * 0.2);
+      gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      lctx.fillStyle = gr; lctx.beginPath(); lctx.arc(K.x, K.y, sw * 0.2, 0, 7); lctx.fill(); lctx.restore();
+    }
+  }
+  // 5) 顔・顎に服がかからないよう、顔のまわりを消す
+  if (tracked && b.FC && !facingBack) {
+    const F = b.FC, R = F.r * 0.78;
+    lctx.save(); lctx.globalCompositeOperation = 'destination-out';
+    const gr = lctx.createRadialGradient(F.x, F.y, R * 0.8, F.x, F.y, R);
+    gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    lctx.fillStyle = gr; lctx.beginPath(); lctx.arc(F.x, F.y, R, 0, 7); lctx.fill(); lctx.restore();
+  }
+  // 6) 合成：カメラ程度のわずかなぼかしと、体に落ちる影でなじませる
+  const swd = d2(b.SL, b.SR);
+  const SH = 8, sw2 = Math.ceil(W / SH), sh2 = Math.ceil(H / SH);
+  if (shadowC.width !== sw2 || shadowC.height !== sh2) { shadowC.width = sw2; shadowC.height = sh2; }
+  shctx.globalCompositeOperation = 'source-over'; shctx.clearRect(0, 0, sw2, sh2);
+  shctx.drawImage(layer, 0, 0, sw2, sh2);
+  shctx.globalCompositeOperation = 'source-in'; shctx.fillStyle = '#000'; shctx.fillRect(0, 0, sw2, sh2);
+  ctx.save(); ctx.globalAlpha = 0.32; ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(shadowC, 0, swd * 0.02, W, H); ctx.restore();
+  ctx.drawImage(layer, 0, 0);
+  if ($('showBones').checked) drawBones(b);
+}
+// ===== なじませ処理 =====
+// 部屋の明るさと色味を測る（10フレームに1回、縮小して平均）
+const lightC = document.createElement('canvas'); lightC.width = 48; lightC.height = 27;
+const lightG = lightC.getContext('2d', { willReadFrequently: true });
+let light = { k: 1, r: 1, g: 1, b: 1 }, lightN = 0;
+function measureLight() {
+  if (lightN++ % 10) return;
+  try {
+    lightG.drawImage(video, 0, 0, 48, 27);
+    const d = lightG.getImageData(0, 0, 48, 27).data;
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; }
+    r /= n * 255; g /= n * 255; b /= n * 255;
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b, m = (r + g + b) / 3 || 1;
+    const k = Math.max(0.55, Math.min(1.0, 0.42 + lum * 1.1));
+    const t = 0.22;   // 色味は控えめに寄せる
+    light = { k, r: 1 + (r / m - 1) * t, g: 1 + (g / m - 1) * t, b: 1 + (b / m - 1) * t };
+  } catch (e) { /* まだ映像が無い */ }
+}
+function matchLighting(g) {
+  if (!$('matchLight').checked) return;
+  const { k, r, g: gg, b } = light;
+  g.save(); g.globalCompositeOperation = 'source-atop';
+  if (k < 0.99) { g.fillStyle = `rgba(0,0,0,${(1 - k).toFixed(3)})`; g.fillRect(0, 0, g.canvas.width, g.canvas.height); }
+  const c = v => Math.max(0, Math.min(255, Math.round(128 * v)));
+  // 色かぶり：平均色との差だけを薄く足す
+  g.globalAlpha = Math.min(0.2, Math.abs(r - 1) + Math.abs(gg - 1) + Math.abs(b - 1));
+  g.fillStyle = `rgb(${c(r * 1.6)},${c(gg * 1.6)},${c(b * 1.6)})`;
+  if (g.globalAlpha > 0.01) g.fillRect(0, 0, g.canvas.width, g.canvas.height);
+  // カメラのノイズ感
+  g.globalAlpha = 0.07; g.fillStyle = g.createPattern(noiseTile, 'repeat'); g.fillRect(0, 0, g.canvas.width, g.canvas.height);
+  g.restore();
+}
+// 脇の下の布：腕を広げた時に胴と袖の間に開く三角を、服の色でつなぐ
+function underColor(it) {
+  if (it._under) return it._under;
+  const g = it.img.getContext('2d', { willReadFrequently: true });
+  const x = Math.round((it.rig.LA.x - 40) * GS), y = Math.round((it.rig.LA.y - 40) * GS);
+  const d = g.getImageData(x, y, 80 * GS, 60 * GS).data;
+  let r = 0, gg = 0, b = 0, n = 0;
+  for (let i = 0; i < d.length; i += 16) if (d[i + 3] > 200) { r += d[i]; gg += d[i + 1]; b += d[i + 2]; n++; }
+  it._under = n ? `rgb(${Math.round(r / n * 0.9)},${Math.round(gg / n * 0.9)},${Math.round(b / n * 0.9)})` : null;
+  return it._under;
+}
+function drawUnderarm(g, it, b) {
+  const col = underColor(it); if (!col) return;
+  const r = it.rig;
+  g.save(); g.fillStyle = col;
+  for (const side of [-1, 1]) {
+    const A = side < 0 ? r.LA : r.RA, S = side < 0 ? r.LS : r.RS, dir = side < 0 ? r.dirL : r.dirR;
+    const inner = t => ({ x: A.x + dir.x * t - side * 6, y: A.y + dir.y * t });
+    const pA = torsoMap(r, b, { x: A.x + side * 10, y: A.y - 20 });
+    const reach = Math.min(150, (r.len || 430) * 0.45);   // 半袖なら短く
+    const pD = torsoMap(r, b, { x: A.x + side * 14, y: A.y + Math.min(110, reach * 0.8) });
+    const p1 = sleeveMap(r, b, inner(Math.min(30, reach * 0.3)), side), p2 = sleeveMap(r, b, inner(reach), side);
+    g.beginPath(); g.moveTo(pA.x, pA.y); g.lineTo(p1.x, p1.y); g.lineTo(p2.x, p2.y); g.lineTo(pD.x, pD.y); g.closePath(); g.fill();
+  }
+  g.restore();
 }
 
+let frames = 0, fpsT = performance.now();
 function loop() {
-  if (video.readyState >= 2 && video.videoWidth) {
-    fit();
-    drawVideo();
-    if (landmarker && video.currentTime !== lastVideoTime) {
-      lastVideoTime = video.currentTime;
-      try {
-        const res = landmarker.detectForVideo(video, performance.now());
-        pose = res.landmarks && res.landmarks[0] ? res.landmarks[0] : null;
-      } catch (err) { pose = null; }
+  if (camOn && video.readyState >= 2 && video.videoWidth) {
+    fit(); updateGeo();
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    drawVideoTo(ctx);
+    measureLight();
+    if (landmarker && video.currentTime !== lastT) {
+      lastT = video.currentTime;
+      let r = null;
+      try { r = landmarker.detectForVideo(video, performance.now()); } catch (e) { r = null; }
+      pose = r && r.landmarks && r.landmarks[0] ? r.landmarks[0] : null;
+      if (r) { updateMask(r); if (r.close) r.close(); }
+      const b = trackOn ? bodyFromPose() : null;
+      if (b) { lost = 0; smoothBody(b); } else if (++lost > 15) sm = null;
     }
-    updateSmooth(computeTarget());
-    drawGarment();
+    if (!dkActive()) renderOutfit();   // AIライブ中は自前の合成を止める（軽くする）
+    frames++;
+    const now = performance.now();
+    if (now - fpsT > 1000) { $('fps').textContent = frames + ' fps'; frames = 0; fpsT = now; }
   }
   requestAnimationFrame(loop);
 }
 
-cv.addEventListener('pointerdown', e => {
-  drag = { x: e.clientX, y: e.clientY, ox: offset.x, oy: offset.y };
-  cv.setPointerCapture(e.pointerId);
-});
-cv.addEventListener('pointermove', e => {
-  if (!drag) return;
-  offset.x = drag.ox + (e.clientX - drag.x);
-  offset.y = drag.oy + (e.clientY - drag.y);
-});
-cv.addEventListener('pointerup', () => { drag = null; });
-cv.addEventListener('pointercancel', () => { drag = null; });
-
-document.getElementById('resetBtn').onclick = () => { offset = { x: 0, y: 0 }; };
-
-document.getElementById('shotBtn').onclick = () => {
-  cv.toBlob(blob => {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'tryon.png';
-    a.click();
-  }, 'image/png');
-};
-
-document.getElementById('startBtn').onclick = async () => {
-  const btn = document.getElementById('startBtn');
-  btn.disabled = true;
+function explain(err) {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return 'このページではカメラを使えません。Chrome / Edge で開くか、httpsのアドレスで開いてください';
+  if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) return 'カメラの許可がありません。ブラウザの設定でカメラを許可してください';
+  if (err && (err.name === 'NotFoundError' || err.name === 'OverconstrainedError')) return 'カメラが見つかりません';
+  if (err && err.name === 'NotReadableError') return 'カメラが他のアプリで使われています';
+  return 'カメラを起動できませんでした：' + (err && err.message ? err.message : err);
+}
+let vision = null, fileset = null;
+async function loadTracker(kind) {
+  if (!vision) vision = await import(LIB_URL);
+  if (!fileset) fileset = await vision.FilesetResolver.forVisionTasks(WASM_URL);
+  const opts = d => ({ baseOptions: { modelAssetPath: MODEL(kind), delegate: d }, runningMode: 'VIDEO', numPoses: 1, outputSegmentationMasks: true });
+  try { return await vision.PoseLandmarker.createFromOptions(fileset, opts('GPU')); }
+  catch (e) { return await vision.PoseLandmarker.createFromOptions(fileset, opts('CPU')); }
+}
+async function startTracker() {
+  trackOn = false;
+  say('姿勢を読み込んでいます…（初回は数秒〜十数秒）');
   try {
-    statusEl.textContent = 'カメラ起動中…';
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
-    video.srcObject = stream;
-    await video.play();
-    statusEl.textContent = 'モデル読込中…';
-    const vision = await import(LIB_URL);
-    const fileset = await vision.FilesetResolver.forVisionTasks(WASM_URL);
-    const opts = (delegate) => ({
-      baseOptions: { modelAssetPath: MODEL_URL, delegate },
-      runningMode: 'VIDEO',
-      numPoses: 1,
-    });
-    try {
-      landmarker = await vision.PoseLandmarker.createFromOptions(fileset, opts('GPU'));
-    } catch (e) {
-      landmarker = await vision.PoseLandmarker.createFromOptions(fileset, opts('CPU'));
-    }
-    statusEl.textContent = '追従中';
+    const lm = await loadTracker($('model').value);
+    if (landmarker && landmarker.close) landmarker.close();
+    landmarker = lm; trackOn = true; sm = null;
+    say('商品を自分にドラッグしてください。上半身と両腕が映る距離が一番きれいに合います');
+    setTimeout(() => { if (msg.textContent.startsWith('商品を')) msg.hidden = true; }, 6000);
   } catch (err) {
-    statusEl.textContent = 'エラー: ' + (err.message || err);
-    btn.disabled = false;
+    say('姿勢認識を読み込めませんでした（通信を確認）。商品をタップすると仮の位置に表示されます', true);
   }
+}
+$('model').addEventListener('change', () => { if (camOn) startTracker(); });
+$('startBtn').onclick = async () => {
+  const btn = $('startBtn'); btn.disabled = true;
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }); }
+  catch (err) { say(explain(err), true); btn.disabled = false; return; }
+  video.srcObject = stream;
+  try { await video.play(); } catch (e) {}
+  camOn = true; $('start').style.display = 'none';
+  startTracker();
 };
 
+// ================================================================
+//  高画質AI（静止画）：Hugging Face の無料デモ IDM-VTON に送る
+// ================================================================
+let aiUrl = null;
+$('aiBtn').onclick = async () => {
+  if (!camOn) { say('先にカメラを起動してください', true); return; }
+  if (!item) { say('先に商品を選んでください', true); return; }
+  const btn = $('aiBtn'); btn.disabled = true;
+  try {
+    say('AIで生成しています…（外部の無料サーバーに写真を送信中。混雑時は数分かかります）');
+    // 人物：今のカメラ映像（服なし）、服：白背景に平置き
+    const pc = document.createElement('canvas'); pc.width = cv.width; pc.height = cv.height;
+    const pg = pc.getContext('2d'); pg.translate(pc.width, 0); pg.scale(-1, 1); pg.drawImage(video, geo.dx, geo.dy, geo.dw, geo.dh);
+    const gc = document.createElement('canvas'); gc.width = 768; gc.height = 1024;
+    const gg = gc.getContext('2d'); gg.fillStyle = '#fff'; gg.fillRect(0, 0, 768, 1024);
+    const k = Math.min(768 / GW, 1024 / GH); gg.drawImage(item.img, (768 - GW * k) / 2, (1024 - GH * k) / 2, GW * k, GH * k);
+    const toBlob = c => new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+    const [personBlob, garmBlob] = await Promise.all([toBlob(pc), toBlob(gc)]);
+    const { Client, handle_file } = await import(GRADIO_URL);
+    const app = await Client.connect('yisol/IDM-VTON');
+    const res = await app.predict('/tryon', {
+      dict: { background: handle_file(personBlob), layers: [], composite: null },
+      garm_img: handle_file(garmBlob),
+      garment_des: item.desc || 'a shirt',
+      is_checked: true, is_checked_crop: true, denoise_steps: 30, seed: 42,
+    });
+    const out = res.data && res.data[0];
+    aiUrl = out && (out.url || out.path || out);
+    if (!aiUrl) throw new Error('結果の画像が返ってきませんでした');
+    $('aiImg').src = aiUrl; $('aiView').style.display = 'flex'; say('');
+  } catch (err) {
+    say('AI試着に失敗しました（無料枠の上限・混雑・サーバー停止の可能性）：' + (err && err.message ? err.message : err), true);
+  } finally { btn.disabled = false; }
+};
+$('aiClose').onclick = () => { $('aiView').style.display = 'none'; };
+$('aiSave').onclick = () => { if (!aiUrl) return; const a = document.createElement('a'); a.href = aiUrl; a.download = 'ai-tryon.png'; a.target = '_blank'; a.click(); };
+
+// ================================================================
+//  本物のAI試着（ライブ）：Decart の Lucy VTON に接続する
+//  ※ 個人のPC内で使う前提で、APIキーをブラウザから直接使う（公開サイトには置かないこと）
+// ================================================================
+const DK_SDK = ['https://esm.sh/@decartai/sdk', 'https://cdn.jsdelivr.net/npm/@decartai/sdk/+esm'];
+const DK_RATE = 0.02;   // 1秒あたりの料金の目安（USD、標準モード）
+const dk = { rt: null, stream: null, t0: 0, timer: null, busy: false };
+function dkActive() { return !!dk.rt; }
+try { const k = localStorage.getItem('dkKey'); if (k) { $('dkKey').value = k; $('dkSave').checked = true; } } catch (e) {}
+function dkInfo(t, err) { $('dkInfo').textContent = t; $('dkInfo').style.color = err ? '#ff8a9a' : ''; }
+async function dkLoadSdk() {
+  let last;
+  for (const u of DK_SDK) { try { return await import(u); } catch (e) { last = e; } }
+  throw new Error('SDKを読み込めませんでした（通信を確認）：' + (last && last.message));
+}
+// AIに渡す服の画像：取り込んだ写真は元のファイル、サンプルは白背景に置いた画像
+async function dkGarment(it) {
+  if (it.srcFile) return it.srcFile;
+  const c = document.createElement('canvas'); c.width = 768; c.height = 1024;
+  const g = c.getContext('2d'); g.fillStyle = '#f4f4f6'; g.fillRect(0, 0, 768, 1024);
+  const t = it.thumb, k = Math.min(768 / t.width, 1024 / t.height); g.drawImage(t, (768 - t.width * k) / 2, (1024 - t.height * k) / 2, t.width * k, t.height * k);
+  return await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+}
+const dkPrompt = it => `The person is wearing a ${it.desc || 'shirt'}, fitted naturally to their upper body with realistic fabric texture, folds, drape and lighting, sleeves following the arms.`;
+async function dkApply() {
+  if (!dk.rt || !item) return;
+  try {
+    dkInfo('服を着せています…');
+    await dk.rt.set({ prompt: dkPrompt(item), image: await dkGarment(item), enhance: false });
+    dkInfo('');
+  } catch (e) { dkInfo('服の切り替えに失敗：' + (e && e.message ? e.message : e), true); }
+}
+window.dkApply = dkApply;
+async function dkStop(reason) {
+  clearInterval(dk.timer); dk.timer = null;
+  try { if (dk.rt) dk.rt.disconnect(); } catch (e) {}
+  dk.rt = null;
+  if (dk.stream) { dk.stream.getTracks().forEach(t => t.stop()); dk.stream = null; }
+  $('aiLive').style.display = 'none'; $('aiLive').srcObject = null;
+  $('dkBtn').textContent = 'AIライブ試着を開始';
+  const used = dk.t0 ? Math.round((performance.now() - dk.t0) / 1000) : 0; dk.t0 = 0;
+  dkInfo(`${reason || '停止しました'}（今回の使用：約${used}秒・目安 $${(used * DK_RATE).toFixed(2)}）`);
+}
+async function dkStart() {
+  const key = $('dkKey').value.trim();
+  if (!key) { dkInfo('先にDecartのAPIキーを貼り付けてください（platform.decart.ai で無料登録）', true); return; }
+  if (!item) { dkInfo('先に左の一覧から服を選んでください', true); return; }
+  try { if ($('dkSave').checked) localStorage.setItem('dkKey', key); else localStorage.removeItem('dkKey'); } catch (e) {}
+  dk.busy = true; $('dkBtn').disabled = true; dkInfo('AIに接続しています…');
+  try {
+    const { createDecartClient, models } = await dkLoadSdk();
+    const model = models.realtime('lucy-vton-latest');
+    dk.stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: 'user', frameRate: model.fps, width: model.width, height: model.height },
+    });
+    const client = createDecartClient({ apiKey: key });
+    const live = $('aiLive');
+    dk.rt = await client.realtime.connect(dk.stream, {
+      model, mirror: 'auto',
+      onRemoteStream: st => { live.srcObject = st; live.style.display = 'block'; live.play().catch(() => {}); },
+      initialState: { prompt: dkPrompt(item), image: await dkGarment(item), enhance: false },
+    });
+    if (dk.rt.on) {
+      dk.rt.on('error', e => dkInfo('AIでエラー：' + (e && e.message ? e.message : e), true));
+      dk.rt.on('connectionChange', st => { if (st === 'disconnected' && dk.rt) dkStop('接続が切れました'); });
+    }
+    dk.t0 = performance.now();
+    $('dkBtn').textContent = 'AIライブ試着を止める';
+    const limit = +$('dkLimit').value;
+    dk.timer = setInterval(() => {
+      const sec = Math.round((performance.now() - dk.t0) / 1000);
+      dkInfo(`AIライブ中：${sec}秒 / 自動停止 ${limit}秒（目安 $${(sec * DK_RATE).toFixed(2)}）。左の服を選ぶと着替えます`);
+      if (sec >= limit) dkStop('自動停止しました');
+    }, 1000);
+  } catch (e) {
+    await dkStop('');
+    const m = e && e.message ? e.message : String(e);
+    dkInfo('AIに接続できませんでした：' + m + (/401|403|auth|key/i.test(m) ? '（APIキーを確認）' : /credit|quota|402|payment/i.test(m) ? '（無料クレジットが残っていない可能性。ここで止めてください）' : ''), true);
+  } finally { dk.busy = false; $('dkBtn').disabled = false; }
+}
+$('dkBtn').onclick = () => { if (dk.busy) return; dk.rt ? dkStop() : dkStart(); };
+// タブを離れたら止める（気付かないうちにクレジットを使わないように）
+document.addEventListener('visibilitychange', () => { if (document.hidden && dk.rt) dkStop('画面を離れたので停止しました'); });
+window.addEventListener('beforeunload', () => { if (dk.rt) dkStop(); });
+
+// 確認用（URLの末尾に #debug を付けた時だけ）：骨格を手で与えて変形を確かめる
+if (location.hash === '#debug') window.__debug = { setBody: b => { sm = b; }, select, items, GL, noGL: v => { GL.off = v; }, setBack: v => { facingBack = v; } };
 requestAnimationFrame(loop);
 </script>
 </body>
